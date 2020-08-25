@@ -278,7 +278,7 @@ def run():
     '''
     if args.use_cmf:
         (
-            u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices, val_labels, val_u_indices, val_v_indices, test_labels, test_u_indices, test_v_indices, class_values
+            u_features_cmf, v_features_cmf, adj_train_cmf, train_labels_cmf, train_u_indices_cmf, train_v_indices_cmf, val_labels_cmf, val_u_indices_cmf, val_v_indices_cmf, test_labels_cmf, test_u_indices_cmf, test_v_indices_cmf, class_values_cmf
         ) = load_data_monti(
             args.data_name, args.testing)
 

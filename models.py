@@ -210,10 +210,10 @@ class IGMC(GNN):
             concat_states.append(x)
         concat_states = torch.cat(concat_states, 1)
 
-        states = []
-        for i in range(1):
+        entities = []
+        for i in range(0, 2):
             states.append(data.x[:, i] == 1)
-        x = torch.cat([concat_states[s] for s in states], 1)
+        x = torch.cat([concat_states[e] for e in entities], 1)
         if self.side_features:
             x = torch.cat([x, data.u_feature, data.v_feature], 1)
 

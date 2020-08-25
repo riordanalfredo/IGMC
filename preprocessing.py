@@ -216,6 +216,15 @@ def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=
         val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
 
 
+'''
+    IGCMF side matrix loader
+'''
+
+
+def load_data_sidematrix(dataset):
+    pass
+
+
 def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=None):
     """
     Loads data from Monti et al. paper.
@@ -255,6 +264,7 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         u_features = None
         v_features = None
 
+    # rmv
     u_nodes_ratings = np.where(M)[0]
     v_nodes_ratings = np.where(M)[1]
     ratings = M[np.where(M)]
@@ -262,6 +272,7 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
     u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(
         np.int64), v_nodes_ratings.astype(np.int32)
     ratings = ratings.astype(np.float64)
+    # rmv
 
     u_nodes = u_nodes_ratings
     v_nodes = v_nodes_ratings
@@ -348,6 +359,7 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         rating_mx_train[train_idx] = np.array(
             [post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
 
+    # causes bug for one-hot matrix
     rating_mx_train = sp.csr_matrix(
         rating_mx_train.reshape(num_users, num_items))
 
