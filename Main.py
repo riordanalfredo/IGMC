@@ -42,7 +42,7 @@ warnings.showwarning = warn_with_traceback
 def run():
     # Arguments
     parser = argparse.ArgumentParser(
-        description='Inductive Graph-based Matrix Completion')
+        description='Inductive Graph-based Collective Matrix Factorization')
     # general settings
     parser.add_argument('--testing', action='store_true', default=False,
                         help='if set, use testing mode which splits all ratings into train/test;\
@@ -83,6 +83,9 @@ def run():
                         help='if > 0, upper bound the # nodes per hop by another subsampling')
     parser.add_argument('--use-features', action='store_true', default=False,
                         help='whether to use node features (side information)')
+    # IGCMF args
+    parser.add_argument('--use-cmf', action='store_true', default=False,
+                        help='use collective matrix factorization or skip')
     # edge dropout settings
     parser.add_argument('--adj-dropout', type=float, default=0.2,
                         help='if not 0, random drops edges from adjacency matrix with this prob')
@@ -264,6 +267,18 @@ def run():
         u_features, v_features = None, None
         n_features = 0
 
+    '''
+        TODO: IGCMF application. At the moment, we only use ML-100k dataset.
+        All returned variables are concatenated with '_cmf' to differentiate them with original matrix.
+
+        u_features and v_features will be None at them moment.
+    '''
+    if args.use_cmf:
+        (
+            u_features_cmf, v_features_cmf, adj_train_cmf, train_labels_cmf, train_u_indices_cmf, train_v_indices_cmf, val_labels_cmf, val_u_indices_cmf, val_v_indices_cmf, test_labels_cmf, test_u_indices_cmf, test_v_indices_cmf, class_values_cmf
+        ) = load_data_monti(
+            args.data_name, args.testing, rating_map, post_rating_map)
+
     if args.debug:  # use a small number of data to debug
         num_data = 1000
         train_u_indices, train_v_indices = train_u_indices[:
@@ -375,7 +390,7 @@ def run():
     '''
         Train and apply the GNN model
     '''
-    if False:
+    if False:  # debugged
         # DGCNN_RS GNN model
         model = DGCNN_RS(
             train_graphs,
@@ -413,6 +428,7 @@ def run():
             multiply_by=multiply_by
         )
 
+    # use this method to print
     def logger(info, model, optimizer):
         epoch, train_loss, test_rmse = info['epoch'], info['train_loss'], info['test_rmse']
         with open(os.path.join(args.res_dir, 'log.txt'), 'a') as f:

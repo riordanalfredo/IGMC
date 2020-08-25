@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import numpy as np
 import scipy.sparse as sp
+from scipy.io import loadmat
 import pickle as pkl
 import os
 import h5py
@@ -39,6 +40,7 @@ def load_matlab_file(path_file, name_field):
         '.mat' files should be saved in the '-v7.3' format
     """
     db = h5py.File(path_file, 'r')
+    # db = loadmat(path_file)
     ds = db[name_field]
     try:
         if 'ir' in ds.keys():
@@ -61,8 +63,10 @@ def preprocess_user_item_features(u_features, v_features):
     Stacks item features under the user features.
     """
 
-    zero_csr_u = sp.csr_matrix((u_features.shape[0], v_features.shape[1]), dtype=u_features.dtype)
-    zero_csr_v = sp.csr_matrix((v_features.shape[0], u_features.shape[1]), dtype=v_features.dtype)
+    zero_csr_u = sp.csr_matrix(
+        (u_features.shape[0], v_features.shape[1]), dtype=u_features.dtype)
+    zero_csr_v = sp.csr_matrix(
+        (v_features.shape[0], u_features.shape[1]), dtype=v_features.dtype)
 
     u_features = sp.hstack([u_features, zero_csr_u], format='csr')
     v_features = sp.hstack([zero_csr_v, v_features], format='csr')
@@ -93,7 +97,8 @@ def globally_normalize_bipartite_adjacency(adjacencies, verbose=False, symmetric
     degree_u_inv = degree_u_inv_sqrt_mat.dot(degree_u_inv_sqrt_mat)
 
     if symmetric:
-        adj_norm = [degree_u_inv_sqrt_mat.dot(adj).dot(degree_v_inv_sqrt_mat) for adj in adjacencies]
+        adj_norm = [degree_u_inv_sqrt_mat.dot(adj).dot(
+            degree_v_inv_sqrt_mat) for adj in adjacencies]
 
     else:
         adj_norm = [degree_u_inv.dot(adj) for adj in adjacencies]
@@ -114,8 +119,8 @@ def sparse_to_tuple(sparse_mx):
     return coords, values, shape
 
 
-def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=None, 
-                              datasplit_from_file=False, verbose=True, rating_map=None, 
+def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=None,
+                              datasplit_from_file=False, verbose=True, rating_map=None,
                               post_rating_map=None, ratio=1.0):
     """
     Splits data set into train/val/test sets from full bipartite adjacency matrix. Shuffling of dataset is done in
@@ -127,20 +132,23 @@ def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=
     if datasplit_from_file and os.path.isfile(datasplit_path):
         print('Reading dataset splits from file...')
         with open(datasplit_path, 'rb') as f:
-            num_users, num_items, u_nodes, v_nodes, ratings, u_features, v_features = pkl.load(f)
+            num_users, num_items, u_nodes, v_nodes, ratings, u_features, v_features = pkl.load(
+                f)
 
         if verbose:
             print('Number of users = %d' % num_users)
             print('Number of items = %d' % num_items)
             print('Number of links = %d' % ratings.shape[0])
-            print('Fraction of positive links = %.4f' % (float(ratings.shape[0]) / (num_users * num_items),))
+            print('Fraction of positive links = %.4f' %
+                  (float(ratings.shape[0]) / (num_users * num_items),))
 
     else:
         num_users, num_items, u_nodes, v_nodes, ratings, u_features, v_features = load_data(dataset, seed=seed,
                                                                                             verbose=verbose)
 
         with open(datasplit_path, 'wb') as f:
-            pkl.dump([num_users, num_items, u_nodes, v_nodes, ratings, u_features, v_features], f)
+            pkl.dump([num_users, num_items, u_nodes, v_nodes,
+                      ratings, u_features, v_features], f)
 
     if rating_map is not None:
         for i, x in enumerate(ratings):
@@ -148,7 +156,8 @@ def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=
 
     neutral_rating = -1
 
-    rating_dict = {r: i for i, r in enumerate(np.sort(np.unique(ratings)).tolist())}
+    rating_dict = {r: i for i, r in enumerate(
+        np.sort(np.unique(ratings)).tolist())}
 
     labels = np.full((num_users, num_items), neutral_rating, dtype=np.int32)
     labels[u_nodes, v_nodes] = np.array([rating_dict[r] for r in ratings])
@@ -198,8 +207,10 @@ def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=
     if post_rating_map is None:
         rating_mx_train[train_idx] = labels[train_idx].astype(np.float32) + 1.
     else:
-        rating_mx_train[train_idx] = np.array([post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
-    rating_mx_train = sp.csr_matrix(rating_mx_train.reshape(num_users, num_items))
+        rating_mx_train[train_idx] = np.array(
+            [post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
+    rating_mx_train = sp.csr_matrix(
+        rating_mx_train.reshape(num_users, num_items))
 
     return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
         val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
@@ -238,11 +249,18 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         u_features = np.eye(num_users)
         v_features = Wcol
 
+    # IGCMF experiment does not require side features, because it is already
+    # an extracted feature
+    elif dataset == 'ml_100k':
+        u_features = None
+        v_features = None
+
     u_nodes_ratings = np.where(M)[0]
     v_nodes_ratings = np.where(M)[1]
     ratings = M[np.where(M)]
 
-    u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(np.int64), v_nodes_ratings.astype(np.int32)
+    u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(
+        np.int64), v_nodes_ratings.astype(np.int32)
     ratings = ratings.astype(np.float64)
 
     u_nodes = u_nodes_ratings
@@ -254,7 +272,8 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
     neutral_rating = -1  # int(np.ceil(np.float(num_classes)/2.)) - 1
 
     # assumes that ratings_train contains at least one example of every rating type
-    rating_dict = {r: i for i, r in enumerate(np.sort(np.unique(ratings)).tolist())}
+    rating_dict = {r: i for i, r in enumerate(
+        np.sort(np.unique(ratings)).tolist())}
 
     labels = np.full((num_users, num_items), neutral_rating, dtype=np.int32)
     labels[u_nodes, v_nodes] = np.array([rating_dict[r] for r in ratings])
@@ -271,11 +290,15 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
     num_val = int(np.ceil(num_train * 0.2))
     num_train = num_train - num_val
 
-    pairs_nonzero_train = np.array([[u, v] for u, v in zip(np.where(Otraining)[0], np.where(Otraining)[1])])
-    idx_nonzero_train = np.array([u * num_items + v for u, v in pairs_nonzero_train])
+    pairs_nonzero_train = np.array([[u, v] for u, v in zip(
+        np.where(Otraining)[0], np.where(Otraining)[1])])
+    idx_nonzero_train = np.array(
+        [u * num_items + v for u, v in pairs_nonzero_train])
 
-    pairs_nonzero_test = np.array([[u, v] for u, v in zip(np.where(Otest)[0], np.where(Otest)[1])])
-    idx_nonzero_test = np.array([u * num_items + v for u, v in pairs_nonzero_test])
+    pairs_nonzero_test = np.array(
+        [[u, v] for u, v in zip(np.where(Otest)[0], np.where(Otest)[1])])
+    idx_nonzero_test = np.array(
+        [u * num_items + v for u, v in pairs_nonzero_test])
 
     # Internally shuffle training set (before splitting off validation set)
     rand_idx = list(range(len(idx_nonzero_train)))
@@ -285,7 +308,8 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
     pairs_nonzero_train = pairs_nonzero_train[rand_idx]
 
     idx_nonzero = np.concatenate([idx_nonzero_train, idx_nonzero_test], axis=0)
-    pairs_nonzero = np.concatenate([pairs_nonzero_train, pairs_nonzero_test], axis=0)
+    pairs_nonzero = np.concatenate(
+        [pairs_nonzero_train, pairs_nonzero_test], axis=0)
 
     val_idx = idx_nonzero[0:num_val]
     train_idx = idx_nonzero[num_val:num_train + num_val]
@@ -321,10 +345,11 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
     if post_rating_map is None:
         rating_mx_train[train_idx] = labels[train_idx].astype(np.float32) + 1.
     else:
-        rating_mx_train[train_idx] = np.array([post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
+        rating_mx_train[train_idx] = np.array(
+            [post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
 
-    rating_mx_train = sp.csr_matrix(rating_mx_train.reshape(num_users, num_items))
-
+    rating_mx_train = sp.csr_matrix(
+        rating_mx_train.reshape(num_users, num_items))
 
     if u_features is not None:
         u_features = sp.csr_matrix(u_features)
@@ -375,7 +400,8 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     data_array_test = np.array(data_array_test)
 
     if ratio < 1.0:
-        data_array_train = data_array_train[data_array_train[:, -1].argsort()[:int(ratio*len(data_array_train))]]
+        data_array_train = data_array_train[data_array_train[:, -
+                                                             1].argsort()[:int(ratio*len(data_array_train))]]
 
     data_array = np.concatenate([data_array_train, data_array_test], axis=0)
 
@@ -389,7 +415,8 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     u_nodes_ratings, u_dict, num_users = map_data(u_nodes_ratings)
     v_nodes_ratings, v_dict, num_items = map_data(v_nodes_ratings)
 
-    u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(np.int64), v_nodes_ratings.astype(np.int32)
+    u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(
+        np.int64), v_nodes_ratings.astype(np.int32)
     ratings = ratings.astype(np.float64)
 
     u_nodes = u_nodes_ratings
@@ -398,7 +425,8 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     neutral_rating = -1  # int(np.ceil(np.float(num_classes)/2.)) - 1
 
     # assumes that ratings_train contains at least one example of every rating type
-    rating_dict = {r: i for i, r in enumerate(np.sort(np.unique(ratings)).tolist())}
+    rating_dict = {r: i for i, r in enumerate(
+        np.sort(np.unique(ratings)).tolist())}
 
     labels = np.full((num_users, num_items), neutral_rating, dtype=np.int32)
     labels[u_nodes, v_nodes] = np.array([rating_dict[r] for r in ratings])
@@ -435,7 +463,8 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     pairs_nonzero_train = pairs_nonzero_train[rand_idx]
 
     idx_nonzero = np.concatenate([idx_nonzero_train, idx_nonzero_test], axis=0)
-    pairs_nonzero = np.concatenate([pairs_nonzero_train, pairs_nonzero_test], axis=0)
+    pairs_nonzero = np.concatenate(
+        [pairs_nonzero_train, pairs_nonzero_test], axis=0)
 
     val_idx = idx_nonzero[0:num_val]
     train_idx = idx_nonzero[num_val:num_train + num_val]
@@ -462,7 +491,7 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
         train_labels = np.hstack([train_labels, val_labels])
         # for adjacency matrix construction
         train_idx = np.hstack([train_idx, val_idx])
-    
+
     class_values = np.sort(np.unique(ratings))
 
     # make training adjacency matrix
@@ -470,10 +499,12 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     if post_rating_map is None:
         rating_mx_train[train_idx] = labels[train_idx].astype(np.float32) + 1.
     else:
-        rating_mx_train[train_idx] = np.array([post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
-    rating_mx_train = sp.csr_matrix(rating_mx_train.reshape(num_users, num_items))
+        rating_mx_train[train_idx] = np.array(
+            [post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
+    rating_mx_train = sp.csr_matrix(
+        rating_mx_train.reshape(num_users, num_items))
 
-    if dataset =='ml_100k':
+    if dataset == 'ml_100k':
 
         # movie features (genres)
         sep = r'|'
@@ -522,7 +553,8 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
                 # gender
                 u_features[u_dict[u_id], 1] = gender_dict[row['gender']]
                 # occupation
-                u_features[u_dict[u_id], occupation_dict[row['occupation']]] = 1.
+                u_features[u_dict[u_id],
+                           occupation_dict[row['occupation']]] = 1.
 
     elif dataset == 'ml_1m':
 
