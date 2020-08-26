@@ -9,6 +9,7 @@ import os
 import h5py
 import pandas as pd
 import pdb
+from igcmf_functions import ImportedDataset
 from data_utils import load_data, map_data, download_dataset
 
 
@@ -221,17 +222,22 @@ def create_trainvaltest_split(dataset, seed=1234, testing=False, datasplit_path=
 '''
 
 
-def load_data_sidematrix(dataset):
-    pass
+def igcmf_loader(dataset, entity):
+
+    path_dataset = 'raw_data/' + dataset + '/' + entity + '_features'
+    M = load_matlab_file(path_dataset, 'M')
+    Otraining = load_matlab_file(path_dataset, 'Otraining')
+    Otest = load_matlab_file(path_dataset, 'Otest')
+
+    num_users = M.shape[0]
+    num_items = M.shape[1]
+
+    loaded_date = {'M': M, 'Otraining': Otraining, 'Otest': Otest, 'num_users': num_users,
+                   'num_items': num_items, 'u_features': None, 'v_features': None}
+    return loaded_date
 
 
-def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=None):
-    """
-    Loads data from Monti et al. paper.
-    if rating_map is given, apply this map to the original rating matrix
-    if post_rating_map is given, apply this map to the processed rating_mx_train without affecting the labels
-    """
-
+def igmc_loader(dataset, rating_map):
     path_dataset = 'raw_data/' + dataset + '/training_test_dataset.mat'
 
     M = load_matlab_file(path_dataset, 'M')
@@ -258,22 +264,38 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         u_features = np.eye(num_users)
         v_features = Wcol
 
-    # IGCMF experiment does not require side features, because it is already
-    # an extracted feature
-    elif dataset == 'ml_100k':
-        u_features = None
-        v_features = None
+    loaded_date = {'M': M, 'Otraining': Otraining, 'Otest': Otest, 'num_users': num_users,
+                   'num_items': num_items, 'u_features': u_features, 'v_features': v_features}
+    return loaded_date
 
-    # rmv
-    u_nodes_ratings = np.where(M)[0]
-    v_nodes_ratings = np.where(M)[1]
-    ratings = M[np.where(M)]
 
+def load_data_monti(loaded_data, testing=False, post_rating_map=None, is_cmf=False, is_debug=False):
+    """
+    Loads data from Monti et al. paper.
+    if rating_map is given, apply this map to the original rating matrix
+    if post_rating_map is given, apply this map to the processed rating_mx_train without affecting the labels
+
+    IGCMF modified it slightly
+    """
+    M = loaded_data['M']
+    Otraining = loaded_data['Otraining']
+    Otest = loaded_data['Otest']
+    num_users = loaded_data['num_users']
+    num_items = loaded_data['num_items']
+    u_features = loaded_data['u_features']
+    v_features = loaded_data['v_features']
+
+    # get labels
+    u_nodes_ratings = np.where(M)[0]  # nonzeros label u
+    v_nodes_ratings = np.where(M)[1]  # nonzeros label v
+    ratings = M[np.where(M)]  # dot product result
+
+    # specify types
     u_nodes_ratings, v_nodes_ratings = u_nodes_ratings.astype(
         np.int64), v_nodes_ratings.astype(np.int32)
     ratings = ratings.astype(np.float64)
-    # rmv
 
+    # re-assign
     u_nodes = u_nodes_ratings
     v_nodes = v_nodes_ratings
 
@@ -359,7 +381,6 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         rating_mx_train[train_idx] = np.array(
             [post_rating_map[r] for r in class_values[labels[train_idx]]]) + 1.
 
-    # causes bug for one-hot matrix
     rating_mx_train = sp.csr_matrix(
         rating_mx_train.reshape(num_users, num_items))
 
@@ -371,11 +392,25 @@ def load_data_monti(dataset, testing=False, rating_map=None, post_rating_map=Non
         v_features = sp.csr_matrix(v_features)
         print("Item features shape: " + str(v_features.shape))
 
-    return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
-        val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
+    if is_debug:
+        ''' Debug mode?'''
+        num_data = 1000
+        u_train_idx, v_train_idx = u_train_idx[:num_data], v_train_idx[:num_data]
+        u_val_idx, v_val_idx = u_val_idx[:num_data], v_val_idx[:num_data]
+        u_test_idx, v_test_idx = u_test_idx[:num_data], v_test_idx[:num_data]
+
+    if is_cmf:
+        # for IGCMF, return them as an object instead of tuple of variables
+        variables = {'u_features': u_features, 'v_features': v_features, 'adj_train': rating_mx_train, 'train_labels': train_labels, 'train_u_indices': u_train_idx, 'train_v_indices': v_train_idx,
+                     'val_labels': val_labels, 'val_u_indices': u_val_idx, 'val_v_indices': v_val_idx, 'test_labels': test_labels, 'test_u_indices': u_test_idx, 'test_v_indices': v_test_idx,
+                     'class_values': class_values}
+        return ImportedDataset(variables)
+    else:
+        return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
+            val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
 
 
-def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, post_rating_map=None, ratio=1.0):
+def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, post_rating_map=None, ratio=1.0, is_cmf=False):
     """
     Loads official train/test split and uses 10% of training samples for validaiton
     For each split computes 1-of-num_classes labels. Also computes training
@@ -631,5 +666,12 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
     print("User features shape: "+str(u_features.shape))
     print("Item features shape: "+str(v_features.shape))
 
-    return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
-        val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
+    if(is_cmf):
+        # for IGCMF, return them as an object instead of tuple of variables
+        variables = {'u_features': u_features, 'v_features': v_features, 'adj_train': rating_mx_train, 'train_labels': train_labels, 'train_u_indices': u_train_idx, 'train_v_indices': v_train_idx,
+                     'val_labels': val_labels, 'val_u_indices': u_val_idx, 'val_v_indices': v_val_idx, 'test_labels': test_labels, 'test_u_indices': u_test_idx, 'test_v_indices': v_test_idx,
+                     'class_values': class_values}
+        return ImportedDataset(variables)
+    else:
+        return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
+            val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values

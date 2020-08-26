@@ -20,6 +20,7 @@ from data_utils import *
 from preprocessing import *
 from train_eval import *
 from models import *
+import igcmf_functions
 
 import traceback
 import warnings
@@ -169,37 +170,32 @@ def main():
     '''
       3. Load data (only ml_100k for now)
     '''
+
+    datasets = []  # objects of data
     if args.data_name == 'ml_100k':
         print("Using official MovieLens dataset split u1.base/u1.test with 20% validation \
               set size...")
-        (
-            u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices,
-            val_labels, val_u_indices, val_v_indices, test_labels, test_u_indices,
-            test_v_indices, class_values
-        ) = load_official_trainvaltest_split(
+        # TODO: Please make it into an object instead of returning multiple variables like this.
+        mainData = load_official_trainvaltest_split(
             args.data_name, args.testing, rating_map, post_rating_map, args.ratio
         )
-
+        datasets.append(mainData)
     '''
       Get the side feature data, uses data extraction from matlab file (Monti et al)
     '''
     if args.use_cmf:
-        (
-            u_features_cmf, v_features_cmf, adj_train_cmf, train_labels_cmf, train_u_indices_cmf, train_v_indices_cmf, val_labels_cmf, val_u_indices_cmf, val_v_indices_cmf, test_labels_cmf, test_u_indices_cmf, test_v_indices_cmf, class_values_cmf
-        ) = load_data_monti(
-            args.data_name, args.testing)
+        loaded_data = igcmf_loader(args.data_name, 'user')
+        userFeaturesData = load_data_monti(
+            loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
 
-    '''
-      Debug mode?
-    '''
-    if args.debug:  # use a small number of data to debug
-        num_data = 1000
-        train_u_indices, train_v_indices = train_u_indices[:
-                                                           num_data], train_v_indices[:num_data]
-        val_u_indices, val_v_indices = val_u_indices[:
-                                                     num_data], val_v_indices[:num_data]
-        test_u_indices, test_v_indices = test_u_indices[:
-                                                        num_data], test_v_indices[:num_data]
+        loaded_data = igcmf_loader(args.data_name, 'item')
+        itemFeaturesData = load_data_monti(
+            loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
+
+        # add to objects of dataset
+        datasets.append(userFeaturesData)
+        datasets.append(itemFeaturesData)
+
     '''
       Max train number
     '''
@@ -214,12 +210,90 @@ def main():
     print('#train: %d, #val: %d, #test: %d' % (
         len(train_u_indices), len(val_u_indices), len(test_u_indices)))
     '''
-          Extract enclosing subgraphs to build the train/test or train/val/test graph datasets.
-          (Note that we must extract enclosing subgraphs for testmode and valmode separately, 
-          since the adj_train is different.)
+          Extract enclosing subgraphs to build the train/test or train/val/test graph datasets. (Note that we must extract enclosing subgraphs for testmode and valmode separately, since the adj_train is different.)
       '''
     train_graphs, val_graphs, test_graphs = None, None, None
     data_combo = (args.data_name, args.data_appendix, val_test_appendix)
+
+    # use preprocessed graph datasets (stored on disk)
+    if not args.dynamic_dataset:
+        if args.reprocess or not os.path.isdir('data/{}{}/{}/train'.format(*data_combo)):
+            # if reprocess=True, delete the previously cached data and reprocess.
+            if os.path.isdir('data/{}{}/{}/train'.format(*data_combo)):
+                rmtree('data/{}{}/{}/train'.format(*data_combo))
+            if os.path.isdir('data/{}{}/{}/val'.format(*data_combo)):
+                rmtree('data/{}{}/{}/val'.format(*data_combo))
+            if os.path.isdir('data/{}{}/{}/test'.format(*data_combo)):
+                rmtree('data/{}{}/{}/test'.format(*data_combo))
+            # extract enclosing subgraphs and build the datasets
+            train_graphs, val_graphs, test_graphs = collective_links2subgraphs(
+                datasets)
+
+            # train_graphs, val_graphs, test_graphs = links2subgraphs(
+            #     adj_train,
+            #     train_indices,
+            #     val_indices,
+            #     test_indices,
+            #     train_labels,
+            #     val_labels,
+            #     test_labels,
+            #     args.hop,
+            #     args.sample_ratio,
+            #     args.max_nodes_per_hop,
+            #     u_features,
+            #     v_features,
+            #     args.hop*2+1,
+            #     class_values,
+            #     args.testing
+            )
+        if not args.testing:
+            val_graphs=MyDataset(
+                val_graphs, root = 'data/{}{}/{}/val'.format(*data_combo))
+        test_graphs=MyDataset(
+            test_graphs, root = 'data/{}{}/{}/test'.format(*data_combo))
+        train_graphs=MyDataset(
+            train_graphs, root = 'data/{}{}/{}/train'.format(*data_combo))
+    else:  # build dynamic datasets that extract subgraphs on the fly
+        train_graphs=MyDynamicDataset(
+            'data/{}{}/{}/train'.format(*data_combo),
+            adj_train,
+            train_indices,
+            train_labels,
+            args.hop,
+            args.sample_ratio,
+            args.max_nodes_per_hop,
+            u_features,
+            v_features,
+            args.hop*2+1,
+            class_values
+        )
+        test_graphs=MyDynamicDataset(
+            'data/{}{}/{}/test'.format(*data_combo),
+            adj_train,
+            test_indices,
+            test_labels,
+            args.hop,
+            args.sample_ratio,
+            args.max_nodes_per_hop,
+            u_features,
+            v_features,
+            args.hop*2+1,
+            class_values
+        )
+        if not args.testing:
+            val_graphs=MyDynamicDataset(
+                'data/{}{}/{}/val'.format(*data_combo),
+                adj_train,
+                val_indices,
+                val_labels,
+                args.hop,
+                args.sample_ratio,
+                args.max_nodes_per_hop,
+                u_features,
+                v_features,
+                args.hop*2+1,
+                class_values
+            )
 
 
 if __name__ == "__main__":

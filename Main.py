@@ -20,6 +20,7 @@ from data_utils import *
 from preprocessing import *
 from train_eval import *
 from models import *
+from igcmf_functions import load_side_matrix
 
 import traceback
 import warnings
@@ -221,11 +222,13 @@ def run():
         datasplit_path = 'raw_data/' + args.data_name + '/nofeatures.pickle'
 
     if args.data_name in ['flixster', 'douban', 'yahoo_music']:
+        loaded_data = igmc_loader(
+            args.data_name, rating_map)
         (
             u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices,
             val_labels, val_u_indices, val_v_indices, test_labels, test_u_indices,
             test_v_indices, class_values
-        ) = load_data_monti(args.data_name, args.testing, rating_map, post_rating_map)
+        ) = load_data_monti(loaded_data, args.testing, post_rating_map)
     elif args.data_name == 'ml_100k':
         print("Using official MovieLens dataset split u1.base/u1.test with 20% validation \
             set size...")
@@ -270,18 +273,6 @@ def run():
         u_features, v_features = None, None
         n_features = 0
 
-    '''
-        TODO: IGCMF application. At the moment, we only use ML-100k dataset.
-        All returned variables are concatenated with '_cmf' to differentiate them with original matrix.
-
-        u_features and v_features will be None at them moment.
-    '''
-    if args.use_cmf:
-        (
-            u_features_cmf, v_features_cmf, adj_train_cmf, train_labels_cmf, train_u_indices_cmf, train_v_indices_cmf, val_labels_cmf, val_u_indices_cmf, val_v_indices_cmf, test_labels_cmf, test_u_indices_cmf, test_v_indices_cmf, class_values_cmf
-        ) = load_data_monti(
-            args.data_name, args.testing)
-
     if args.debug:  # use a small number of data to debug
         num_data = 1000
         train_u_indices, train_v_indices = train_u_indices[:
@@ -303,6 +294,18 @@ def run():
         len(train_u_indices), len(val_u_indices), len(test_u_indices)))
 
     '''
+        TODO: IGCMF application. At the moment, we only use ML-100k dataset.
+        All returned variables are concatenated with '_cmf' to differentiate them with original matrix. NOT WORKING YET!
+
+        u_features and v_features will be None at them moment.
+    '''
+    if args.use_cmf:
+        loaded_data = igcmf_loader(args.data_name, 'user')
+        userFeaturesData = load_side_matrix(loaded_data, train_labels, train_u_indices, train_v_indices,
+                                            val_labels, val_u_indices, val_v_indices, test_labels, test_u_indices,
+                                            test_v_indices, is_testing=args.testing)
+
+    '''
         Extract enclosing subgraphs to build the train/test or train/val/test graph datasets.
         (Note that we must extract enclosing subgraphs for testmode and valmode separately, 
         since the adj_train is different.)
@@ -320,6 +323,7 @@ def run():
             if os.path.isdir('data/{}{}/{}/test'.format(*data_combo)):
                 rmtree('data/{}{}/{}/test'.format(*data_combo))
             # extract enclosing subgraphs and build the datasets
+
             train_graphs, val_graphs, test_graphs = links2subgraphs(
                 adj_train,
                 train_indices,
