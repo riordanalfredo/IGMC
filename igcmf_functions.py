@@ -9,6 +9,7 @@ import multiprocessing as mp
 import scipy.sparse as ssp
 import networkx as nx
 import numpy as np
+import random
 
 
 class ImportedDataset:
@@ -78,7 +79,7 @@ def load_side_matrix(loaded_data, train_labels, train_u_indices, train_v_indices
 
 
 '''
-    Method to convert networkx graph to PyGGraph format using pytorch. 
+    Method to convert networkx graph to PyGGraph format using pytorch.
 '''
 
 
@@ -120,103 +121,152 @@ def nx_to_PyGGraph(g, graph_label, node_labels, node_features, max_node_label, c
 '''
 
 
-def collective_subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None,
+def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None,
                                             u_features=None, v_features=None, class_values=None):
     # extract the h-hop enclosing subgraph around link 'ind'
     dist = 0
-    num_types = len(ind) + 2  # for now add 2 number of node types, M notation
-    nodes = [ind[i] for i in range(num_types)]  # O(M)
-    distances = [[0] for j in range(num_types)]  # O(M)
-    visited_sets = [set([ind[k]]) for k in range(num_types)]  # O(M)
-    fringe_sets = [set([ind[l]]) for l in range(num_types)]  # O(M)
+    '''
+    TODO: must make it dynamic later: u indices, i indices,  i_feature cols, u_feature cols. Also, order matters here.
+     '''
+    ind = np.concatenate(
+        (u_features.shape[1], inds[0], inds[1], v_features.shape[1]), axis=1)
 
-    # TODO: DONT DELETE! USE THIS AS REFERENCE!
+    num_node_types = len(ind)  # M notation
+    # O(M) need to add u_feature.shape[1]
+    nodes = dict(list(enumerate([ind[i] for i in range(num_node_types)])))
+    distances = dict(
+        list(enumerate([[0] for _ in range(num_node_types)])))  # O(M)
+    visited_sets = dict(
+        list(enumerate([set([ind[k]]) for k in range(num_node_types)])))  # O(M)
+    fringe_sets = dict(
+        list(enumerate([set([ind[l]]) for l in range(num_node_types)])))  # O(M)
+
+    # NOTE: DONT DELETE! USE THIS AS REFERENCE!
     # u_nodes, v_nodes = [ind[0]], [ind[1]]
     # u_dist, v_dist = [0], [0]
     # u_visited, v_visited = set([ind[0]]), set([ind[1]])
     # u_fringe, v_fringe = set([ind[0]]), set([ind[1]])
 
     conns = {
-        # row-col format / u and v
-        0: [ind[0], ind[1], A],
-        1: [ind[0], u_features.shape[1], u_features],
-        2: [ind[1], v_features.shape[1], v_features],
+        # connections/ relations: u, v, adj_matrix
+        0: [ind[1], ind[0], u_features],  # u_features-user
+        1: [ind[1], ind[2], A],  # user-item
+        2: [ind[2], ind[3], v_features],  # item-i_features
     }
+    for i in range(len(conns)):  # up to 3 loops
+        A = conns[0][2]  # adjacency matrix reference
+        for dist in range(1, h+1):  # for now, we only focus in 1-hop
+            # get fringe with neighbors(node,A,is_row)
+            fringe_sets[i] = neighbors(conns[i][0], A, True)
+            fringe_sets[i+1] = neighbors(conns[i][1], A, False)
 
-    for dist in range(1, h+1):
-        for i in range()
-        fringe_sets[]
-        v_fringe, u_fringe = neighbors(
-            u_fringe, A, True), neighbors(v_fringe, A, False)
-        u_fringe = u_fringe - u_visited
-        v_fringe = v_fringe - v_visited
-        u_visited = u_visited.union(u_fringe)
-        v_visited = v_visited.union(v_fringe)
-        if sample_ratio < 1.0:
-            u_fringe = random.sample(u_fringe, int(sample_ratio*len(u_fringe)))
-            v_fringe = random.sample(v_fringe, int(sample_ratio*len(v_fringe)))
-        if max_nodes_per_hop is not None:
-            if max_nodes_per_hop < len(u_fringe):
-                u_fringe = random.sample(u_fringe, max_nodes_per_hop)
-            if max_nodes_per_hop < len(v_fringe):
-                v_fringe = random.sample(v_fringe, max_nodes_per_hop)
-        if len(u_fringe) == 0 and len(v_fringe) == 0:
-            break
-        u_nodes = u_nodes + list(u_fringe)
-        v_nodes = v_nodes + list(v_fringe)
-        u_dist = u_dist + [dist] * len(u_fringe)
-        v_dist = v_dist + [dist] * len(v_fringe)
-    subgraph = A[u_nodes, :][:, v_nodes]
-    # remove link between target nodes
-    subgraph[0, 0] = 0
+            # update fringe based on visited sets
+            fringe_sets[i] = fringe_sets[i] - visited_sets[i]
+            fringe_sets[i+1] = fringe_sets[i+1] - visited_sets[i+1]
 
-    # construct nx graph
-    g = nx.Graph()
-    g.add_nodes_from(range(len(u_nodes)), bipartite='u')
-    g.add_nodes_from(range(len(u_nodes), len(
-        u_nodes)+len(v_nodes)), bipartite='v')
-    u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
-    r = r.astype(int)
-    v += len(u_nodes)
-    #g.add_weighted_edges_from(zip(u, v, r))
-    g.add_edges_from(zip(u, v))
+            # get visited nodes based on u and v fringes
+            visited_sets[i] = visited_sets[i].union(fringe_sets[i])
+            visited_sets[i+1] = visited_sets[i+1].union(fringe_sets[i+1])
 
-    edge_types = dict(zip(zip(u, v), r-1))  # transform r back to rating label
-    nx.set_edge_attributes(g, name='type', values=edge_types)
-    # get structural node labels
-    node_labels = [x*2 for x in u_dist] + [x*2+1 for x in v_dist]
+            # use sample ratio (if defined)
+            if sample_ratio < 1.0:
+                fringe_sets[i] = random.sample(
+                    fringe_sets[i], int(sample_ratio*len(fringe_sets[i])))
+                fringe_sets[i+1] = random.sample(
+                    fringe_sets[i+1], int(sample_ratio*len(fringe_sets[i+1])))
 
+            # limiting the number of nodes_per hop (if defined)
+            if max_nodes_per_hop is not None:
+                if max_nodes_per_hop < len(fringe_sets[i]):
+                    fringe_sets[i] = random.sample(
+                        fringe_sets[i], max_nodes_per_hop)
+                if max_nodes_per_hop < len(fringe_sets[i+1]):
+                    fringe_sets[i +
+                                1] = random.sample(fringe_sets[i+1], max_nodes_per_hop)
+
+            # stop if there are no fringes on u and v
+            if len(fringe_sets[i]) == 0 and len(fringe_sets[i+1]) == 0:
+                break
+
+            # update u and v nodes
+            nodes[i] = nodes[i] + list(fringe_sets[i])
+            nodes[i+1] = nodes[i+1] + list(fringe_sets[i+1])
+
+            # update u and v distances
+            distances[i] = distances[i] + [dist] * len(fringe_sets[i])
+            distances[i+1] = distances[i+1] + [dist] * len(fringe_sets[i+1])
+    # subgraph = A[u_nodes, :][:, v_nodes]
+    num_of_subgraphs = range(len(conns))
+    subgraphs = [conns[i][2][nodes[i], :][:, nodes[i+1]]
+                 for i in num_of_subgraphs]  # TODO: should I make it into dictionary?
+
+    # g.add_nodes_from(range(len(u_nodes)), bipartite='u')
+    # g.add_nodes_from(range(len(u_nodes), len(
+    #     u_nodes)+len(v_nodes)), bipartite='v')
+    graphs = []
+    for i in num_of_subgraphs:
+        g = nx.Graph()
+        '''
+            TODO: IGCMF — current problem in here is the library said it is bipartite. How to make it multipartite graph? or can we do better by building multiple bipartite graphs instead?
+        '''
+        # construct nx graph
+        subgraphs[i][0, 0] = 0  # remove link between target nodes
+        g.add_nodes_from(range(len(nodes[i])))
+        g.add_nodes_from(range(len(nodes[i+1]), len(
+            nodes[i])+len(nodes[i+1])))
+        u, v, r = ssp.find(subgraphs[i])  # r is 1, 2... (rating labels + 1)
+        r = r.astype(int)
+        v += len(nodes[i])
+        # g.add_weighted_edges_from(zip(u, v, r))
+        g.add_edges_from(zip(u, v))
+        # transform r back to rating label
+        edge_types = dict(zip(zip(u, v), r-1))
+        nx.set_edge_attributes(g, name='type', values=edge_types)
+        graphs.append(g)
+
+    # get structural node labels with (h * N + 1) formula, where 'h' is number of hop, 'N' is number of node types (4 for now)
+    for i in range(num_node_types):
+        node_labels += [h*num_node_types+i for h in distances[i]]
+
+    # NOTE: IGCMF does not require this anymore.
     # get node features
-    if u_features is not None:
-        u_features = u_features[u_nodes]
-    if v_features is not None:
-        v_features = v_features[v_nodes]
-    node_features = None
-    if False:
-        # directly use padded node features
-        if u_features is not None and v_features is not None:
-            u_extended = np.concatenate(
-                [u_features, np.zeros(
-                    [u_features.shape[0], v_features.shape[1]])], 1
-            )
-            v_extended = np.concatenate(
-                [np.zeros([v_features.shape[0], u_features.shape[1]]),
-                 v_features], 1
-            )
-            node_features = np.concatenate([u_extended, v_extended], 0)
-    if False:
-        # use identity features (one-hot encodings of node idxes)
-        u_ids = one_hot(u_nodes, A.shape[0]+A.shape[1])
-        v_ids = one_hot([x+A.shape[0] for x in v_nodes], A.shape[0]+A.shape[1])
-        node_ids = np.concatenate([u_ids, v_ids], 0)
-        #node_features = np.concatenate([node_features, node_ids], 1)
-        node_features = node_ids
-    if True:
-        # only output node features for the target user and item
-        if u_features is not None and v_features is not None:
-            node_features = [u_features[0], v_features[0]]
+    # if u_features is not None:
+    #     u_features = u_features[u_nodes]
+    # if v_features is not None:
+    #     v_features = v_features[v_nodes]
+    # node_features = None
+    # NOTE: IGCMF does not require this anymore. (ABLATION)
+    # if False:
+    #     # directly use padded node features
+    #     if u_features is not None and v_features is not None:
+    #         u_extended = np.concatenate(
+    #             [u_features, np.zeros(
+    #                 [u_features.shape[0], v_features.shape[1]])], 1
+    #         )
+    #         v_extended = np.concatenate(
+    #             [np.zeros([v_features.shape[0], u_features.shape[1]]),
+    #                 v_features], 1
+    #         )
+    #         node_features = np.concatenate([u_extended, v_extended], 0)
+    # NOTE: IGCMF does not require this anymore. (ABLATION)
+    # if False:
+    #     # use identity features (one-hot encodings of node idxes)
+    #     u_ids = one_hot(u_nodes, A.shape[0]+A.shape[1])
+    #     v_ids = one_hot([x+A.shape[0]
+    #                      for x in v_nodes], A.shape[0]+A.shape[1])
+    #     node_ids = np.concatenate([u_ids, v_ids], 0)
+    #     # node_features = np.concatenate([node_features, node_ids], 1)
+    #     node_features = node_ids
+    # NOTE: IGCMF does not require this anymore.(ABLATION)
+    # if False:
+    #     # only output node features for the target user and item
+    #     if u_features is not None and v_features is not None:
+    #         node_features = [u_features[0], v_features[0]]
 
-    return g, node_labels, node_features
+    # has to combine these subgraphs
+    node_features = None
+
+    return graphs, node_labels, node_features
 
 
 def collective_links2subgraphs(datasets, h=1,
@@ -227,7 +277,19 @@ def collective_links2subgraphs(datasets, h=1,
                                max_node_label=None,
                                class_values=None,
                                testing=False,
-                               parallel=True):
+                               parallel=False):  # to use first if statement
+
+    # TODO: HARDCODED =========
+    main_obj = datasets[0]
+    A = main_obj.adj_train
+    train_indices = (main_obj.train_u_indices, main_obj.train_v_indices)
+    val_indices = (main_obj.val_u_indices, main_obj.val_v_indices)
+    test_indices = (main_obj.test_u_indices, main_obj.test_v_indices)
+    train_labels = main_obj.train_labels
+    u_features = main_obj.u_features
+    v_features = main_obj.v_features
+    # ========
+
     # extract enclosing subgraphs
     if max_node_label is None:  # if not provided, infer from graphs
         max_n_label = {'max_node_label': 0}
@@ -241,7 +303,7 @@ def collective_links2subgraphs(datasets, h=1,
                     # create labelling graph
 
                     # i and j are indices
-                    g, n_labels, n_features = collective_subgraph_extraction_labeling(
+                    gs, n_labels, n_features = collective_subgraph_extraction_labeling(
                         (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features,
                         v_features, class_values
                     )
@@ -251,11 +313,15 @@ def collective_links2subgraphs(datasets, h=1,
                         max_n_label['max_node_label'] = max(
                             max(n_labels), max_n_label['max_node_label']
                         )
-                        g_list.append((g, g_label, n_labels, n_features))
+                        # NOTE: loop each bipartite graph
+                        for g in gs:
+                            g_list.append((g, g_label, n_labels, n_features))
                     else:
-                        g_list.append(nx_to_PyGGraph(
-                            g, g_label, n_labels, n_features, max_node_label, class_values
-                        ))
+                        # NOTE: loop each bipartite graph
+                        for g in gs:
+                            g_list.append(nx_to_PyGGraph(
+                                gs, g_label, n_labels, n_features, max_node_label, class_values
+                            ))
                     pbar.update(1)
         else:
             start = time.time()
@@ -294,14 +360,13 @@ def collective_links2subgraphs(datasets, h=1,
         return g_list
 
     print('Enclosing subgraph extraction begins...')
-    # TODO: I have to do something with datasets
 
-    # train_graphs = helper(A, train_indices, train_labels)
-    # if not testing:
-    #     val_graphs = helper(A, val_indices, val_labels)
-    # else:
-    #     val_graphs = []
-    # test_graphs = helper(A, test_indices, test_labels)
+    train_graphs = helper(A, train_indices, train_labels)
+    if not testing:
+        val_graphs = helper(A, val_indices, val_labels)
+    else:
+        val_graphs = []
+    test_graphs = helper(A, test_indices, test_labels)
 
     # if max_node_label is None:
     #     train_graphs = [
@@ -314,4 +379,5 @@ def collective_links2subgraphs(datasets, h=1,
     #         nx_to_PyGGraph(*x, **max_n_label, class_values=class_values) for x in test_graphs
     #     ]
 
-    # return train_graphs, val_graphs, test_graphs
+    return train_graphs, val_graphs, test_graphs
+    # return train_graphs

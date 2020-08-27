@@ -294,7 +294,6 @@ def subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_ho
     edge_types = dict(zip(zip(u, v), r-1))  # transform r back to rating label
     nx.set_edge_attributes(g, name='type', values=edge_types)
     # get structural node labels
-    # TODO: make it global
     node_labels = [x*2 for x in u_dist] + [x*2+1 for x in v_dist]
 
     # IGCMF, use CMF in here

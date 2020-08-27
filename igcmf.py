@@ -20,7 +20,7 @@ from data_utils import *
 from preprocessing import *
 from train_eval import *
 from models import *
-import igcmf_functions
+from igcmf_functions import *
 
 import traceback
 import warnings
@@ -158,6 +158,7 @@ def main():
             args.data_name, args.save_appendix, val_test_appendix
         )
     )
+
     '''
       2. Transfer Learning
     '''
@@ -167,21 +168,21 @@ def main():
     else:
         args.model_pos = os.path.join(
             args.transfer, 'model_checkpoint{}.pth'.format(args.epochs))
+
     '''
       3. Load data (only ml_100k for now)
     '''
-
     datasets = []  # objects of data
     if args.data_name == 'ml_100k':
         print("Using official MovieLens dataset split u1.base/u1.test with 20% validation \
               set size...")
         # TODO: Please make it into an object instead of returning multiple variables like this.
         mainData = load_official_trainvaltest_split(
-            args.data_name, args.testing, rating_map, post_rating_map, args.ratio
+            args.data_name, args.testing, rating_map, post_rating_map, args.ratio, is_cmf=True
         )
         datasets.append(mainData)
     '''
-      Get the side feature data, uses data extraction from matlab file (Monti et al)
+      4. Get the side feature data, uses data extraction from matlab file (Monti et al)
     '''
     if args.use_cmf:
         loaded_data = igcmf_loader(args.data_name, 'user')
@@ -196,19 +197,6 @@ def main():
         datasets.append(userFeaturesData)
         datasets.append(itemFeaturesData)
 
-    '''
-      Max train number
-    '''
-    if args.max_train_num is not None:  # sample certain number of train
-        perm = np.random.permutation(len(train_u_indices))[:args.max_train_num]
-        train_u_indices = train_u_indices[torch.tensor(perm)]
-        train_v_indices = train_v_indices[torch.tensor(perm)]
-
-    train_indices = (train_u_indices, train_v_indices)
-    val_indices = (val_u_indices, val_v_indices)
-    test_indices = (test_u_indices, test_v_indices)
-    print('#train: %d, #val: %d, #test: %d' % (
-        len(train_u_indices), len(val_u_indices), len(test_u_indices)))
     '''
           Extract enclosing subgraphs to build the train/test or train/val/test graph datasets. (Note that we must extract enclosing subgraphs for testmode and valmode separately, since the adj_train is different.)
       '''
@@ -227,7 +215,15 @@ def main():
                 rmtree('data/{}{}/{}/test'.format(*data_combo))
             # extract enclosing subgraphs and build the datasets
             train_graphs, val_graphs, test_graphs = collective_links2subgraphs(
-                datasets)
+                datasets,
+                args.hop,
+                args.sample_ratio,
+                args.max_nodes_per_hop,
+                None,
+                None,
+                args.hop*2+1,
+                None,
+                args.testing)
 
             # train_graphs, val_graphs, test_graphs = links2subgraphs(
             #     adj_train,
@@ -245,55 +241,14 @@ def main():
             #     args.hop*2+1,
             #     class_values,
             #     args.testing
-            )
+
         if not args.testing:
-            val_graphs=MyDataset(
-                val_graphs, root = 'data/{}{}/{}/val'.format(*data_combo))
-        test_graphs=MyDataset(
-            test_graphs, root = 'data/{}{}/{}/test'.format(*data_combo))
-        train_graphs=MyDataset(
-            train_graphs, root = 'data/{}{}/{}/train'.format(*data_combo))
-    else:  # build dynamic datasets that extract subgraphs on the fly
-        train_graphs=MyDynamicDataset(
-            'data/{}{}/{}/train'.format(*data_combo),
-            adj_train,
-            train_indices,
-            train_labels,
-            args.hop,
-            args.sample_ratio,
-            args.max_nodes_per_hop,
-            u_features,
-            v_features,
-            args.hop*2+1,
-            class_values
-        )
-        test_graphs=MyDynamicDataset(
-            'data/{}{}/{}/test'.format(*data_combo),
-            adj_train,
-            test_indices,
-            test_labels,
-            args.hop,
-            args.sample_ratio,
-            args.max_nodes_per_hop,
-            u_features,
-            v_features,
-            args.hop*2+1,
-            class_values
-        )
-        if not args.testing:
-            val_graphs=MyDynamicDataset(
-                'data/{}{}/{}/val'.format(*data_combo),
-                adj_train,
-                val_indices,
-                val_labels,
-                args.hop,
-                args.sample_ratio,
-                args.max_nodes_per_hop,
-                u_features,
-                v_features,
-                args.hop*2+1,
-                class_values
-            )
+            val_graphs = MyDataset(
+                val_graphs, root='data/{}{}/{}/val'.format(*data_combo))
+        test_graphs = MyDataset(
+            test_graphs, root='data/{}{}/{}/test'.format(*data_combo))
+        train_graphs = MyDataset(
+            train_graphs, root='data/{}{}/{}/train'.format(*data_combo))
 
 
 if __name__ == "__main__":
