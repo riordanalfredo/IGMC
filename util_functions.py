@@ -164,7 +164,7 @@ def links2subgraphs(A,
                     max_node_label=None,
                     class_values=None,
                     testing=False,
-                    parallel=False):
+                    parallel=True):
     # extract enclosing subgraphs
     if max_node_label is None:  # if not provided, infer from graphs
         max_n_label = {'max_node_label': 0}
@@ -249,7 +249,6 @@ def links2subgraphs(A,
 def subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None,
                                  u_features=None, v_features=None, class_values=None):
 
-    print(u_features.shape[1])
     # extract the h-hop enclosing subgraph around link 'ind'
     dist = 0
     u_nodes, v_nodes = [ind[0]], [ind[1]]
