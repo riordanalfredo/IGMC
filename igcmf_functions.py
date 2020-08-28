@@ -10,6 +10,12 @@ import scipy.sparse as ssp
 import networkx as nx
 import numpy as np
 import random
+import torch
+from torch_geometric.data import Data, Dataset, InMemoryDataset
+import warnings
+warnings.simplefilter('ignore', ssp.SparseEfficiencyWarning)
+cur_dir = os.path.dirname(os.path.realpath(__file__))
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 class ImportedDataset:
@@ -98,7 +104,7 @@ def nx_to_PyGGraph(g, graph_label, node_labels, node_features, max_node_label, c
     edge_attr = torch.FloatTensor(
         class_values[edge_type]
     ).unsqueeze(1)  # continuous ratings, num_edges * 1
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label+1))
+    x = torch.FloatTensor(one_hot(node_labels, max(node_labels)+1))
     if node_features is not None:
         if type(node_features) == list:
             # node features are only provided for target user and item
@@ -128,18 +134,16 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
     '''
     TODO: must make it dynamic later: u indices, i indices,  i_feature cols, u_feature cols. Also, order matters here.
      '''
-    ind = np.concatenate(
-        (u_features.shape[1], inds[0], inds[1], v_features.shape[1]), axis=1)
+    item_index = random.randint(
+        0, v_features.shape[1]-1)  # randomize the number of item_features column index
+    ind = (inds[0], inds[1], inds[1], np.int64(item_index))
 
     num_node_types = len(ind)  # M notation
     # O(M) need to add u_feature.shape[1]
-    nodes = dict(list(enumerate([ind[i] for i in range(num_node_types)])))
-    distances = dict(
-        list(enumerate([[0] for _ in range(num_node_types)])))  # O(M)
-    visited_sets = dict(
-        list(enumerate([set([ind[k]]) for k in range(num_node_types)])))  # O(M)
-    fringe_sets = dict(
-        list(enumerate([set([ind[l]]) for l in range(num_node_types)])))  # O(M)
+    nodes = [[ind[i]] for i in range(num_node_types)]
+    distances = [[0] for _ in range(num_node_types)]  # O(M)
+    visited_sets = [set([ind[k]]) for k in range(num_node_types)]  # O(M)
+    fringe_sets = [set([ind[l]]) for l in range(num_node_types)]  # O(M)
 
     # NOTE: DONT DELETE! USE THIS AS REFERENCE!
     # u_nodes, v_nodes = [ind[0]], [ind[1]]
@@ -149,16 +153,15 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
 
     conns = {
         # connections/ relations: u, v, adj_matrix
-        0: [ind[1], ind[0], u_features],  # u_features-user
-        1: [ind[1], ind[2], A],  # user-item
-        2: [ind[2], ind[3], v_features],  # item-i_features
+        # 0: [ind[1], ind[0], u_features],  # u_features-user
+        0: [ind[0], ind[1], A],  # user-item
+        2: [ind[1], ind[2], v_features],  # item-i_features
     }
-    for i in range(len(conns)):  # up to 3 loops
-        A = conns[0][2]  # adjacency matrix reference
+    for i in range(0, len(conns)+2, 2):  # up to 2 loops
         for dist in range(1, h+1):  # for now, we only focus in 1-hop
             # get fringe with neighbors(node,A,is_row)
-            fringe_sets[i] = neighbors(conns[i][0], A, True)
-            fringe_sets[i+1] = neighbors(conns[i][1], A, False)
+            fringe_sets[i+1], fringe_sets[i] = neighbors(
+                fringe_sets[i], conns[i][2], True), neighbors(fringe_sets[i+1], conns[i][2], False)
 
             # update fringe based on visited sets
             fringe_sets[i] = fringe_sets[i] - visited_sets[i]
@@ -195,16 +198,30 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
             # update u and v distances
             distances[i] = distances[i] + [dist] * len(fringe_sets[i])
             distances[i+1] = distances[i+1] + [dist] * len(fringe_sets[i+1])
-    # subgraph = A[u_nodes, :][:, v_nodes]
-    num_of_subgraphs = range(len(conns))
-    subgraphs = [conns[i][2][nodes[i], :][:, nodes[i+1]]
-                 for i in num_of_subgraphs]  # TODO: should I make it into dictionary?
+
+    # combine similar nodes
+    # TODO: it is still hardcoded and not efficient! Other solution could be not storing the value in the size of subgraph creation earlier.
+    # ls = []
+    # for i in range(len(nodes[1])):
+    #     for j in range(len(nodes[2])):
+    #         if (i == j):
+    #             ls.append(nodes[1][j])
+    #             break
+    # nodes[2] = ls
+    # ----------------------------------------------
+
+    nodes[2] = nodes[1]
+    # number of subraphs == connections dictionary size
+    num_of_subgraphs = range(0, len(conns)+2, 2)
+    subgraphs = []
+    subgraphs = [conns[j][2][nodes[j], :][:, nodes[j+1]]
+                 for j in num_of_subgraphs]  # TODO: should I make it into dictionary?
 
     # g.add_nodes_from(range(len(u_nodes)), bipartite='u')
     # g.add_nodes_from(range(len(u_nodes), len(
     #     u_nodes)+len(v_nodes)), bipartite='v')
     graphs = []
-    for i in num_of_subgraphs:
+    for i in range(len(subgraphs)):
         g = nx.Graph()
         '''
             TODO: IGCMF — current problem in here is the library said it is bipartite. How to make it multipartite graph? or can we do better by building multiple bipartite graphs instead?
@@ -225,10 +242,11 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
         graphs.append(g)
 
     # get structural node labels with (h * N + 1) formula, where 'h' is number of hop, 'N' is number of node types (4 for now)
+    node_labels = []
     for i in range(num_node_types):
         node_labels += [h*num_node_types+i for h in distances[i]]
 
-    # NOTE: IGCMF does not require this anymore.
+    # NOTE: HARDCODED! IGCMF does not require this anymore.
     # get node features
     # if u_features is not None:
     #     u_features = u_features[u_nodes]
@@ -258,12 +276,10 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
     #     # node_features = np.concatenate([node_features, node_ids], 1)
     #     node_features = node_ids
     # NOTE: IGCMF does not require this anymore.(ABLATION)
-    # if False:
+    # if True:
     #     # only output node features for the target user and item
     #     if u_features is not None and v_features is not None:
     #         node_features = [u_features[0], v_features[0]]
-
-    # has to combine these subgraphs
     node_features = None
 
     return graphs, node_labels, node_features
@@ -277,18 +293,31 @@ def collective_links2subgraphs(datasets, h=1,
                                max_node_label=None,
                                class_values=None,
                                testing=False,
-                               parallel=False):  # to use first if statement
+                               parallel=True,
+                               is_debug=False):  # to use first if statement
 
     # TODO: HARDCODED =========
     main_obj = datasets[0]
     A = main_obj.adj_train
+    class_values = main_obj.class_values
+    if is_debug:  # use a small number of data to debug
+        num_data = 1000
+        main_obj.train_u_indices, main_obj.train_v_indices = main_obj.train_u_indices[:
+                                                                                      num_data], main_obj.train_v_indices[:num_data]
+        main_obj.val_u_indices, main_obj.val_v_indices = main_obj.val_u_indices[:
+                                                                                num_data], main_obj.val_v_indices[:num_data]
+        main_obj.test_u_indices, main_obj.test_v_indices = main_obj.test_u_indices[:
+                                                                                   num_data], main_obj.test_v_indices[:num_data]
     train_indices = (main_obj.train_u_indices, main_obj.train_v_indices)
     val_indices = (main_obj.val_u_indices, main_obj.val_v_indices)
     test_indices = (main_obj.test_u_indices, main_obj.test_v_indices)
     train_labels = main_obj.train_labels
+    val_labels = main_obj.val_labels
+    test_labels = main_obj.test_labels
     u_features = main_obj.u_features
     v_features = main_obj.v_features
-    # ========
+
+    # ------------------------
 
     # extract enclosing subgraphs
     if max_node_label is None:  # if not provided, infer from graphs
@@ -301,7 +330,6 @@ def collective_links2subgraphs(datasets, h=1,
                 # TODO: how to make it dynamic?
                 for i, j, g_label in zip(links[0], links[1], g_labels):
                     # create labelling graph
-
                     # i and j are indices
                     gs, n_labels, n_features = collective_subgraph_extraction_labeling(
                         (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features,
@@ -320,14 +348,14 @@ def collective_links2subgraphs(datasets, h=1,
                         # NOTE: loop each bipartite graph
                         for g in gs:
                             g_list.append(nx_to_PyGGraph(
-                                gs, g_label, n_labels, n_features, max_node_label, class_values
+                                g, g_label, n_labels, n_features, max_node_label, class_values
                             ))
                     pbar.update(1)
         else:
             start = time.time()
             pool = mp.Pool(mp.cpu_count())
             results = pool.starmap_async(
-                parallel_worker,
+                cmf_parallel_worker,
                 [
                     (g_label, (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features,
                         v_features, class_values)
@@ -351,7 +379,7 @@ def collective_links2subgraphs(datasets, h=1,
             g_list += [
                 nx_to_PyGGraph(g, g_label, n_labels, n_features,
                                max_node_label, class_values)
-                for g_label, g, n_labels, n_features in tqdm(results)
+                for g_label, gs, n_labels, n_features in tqdm(results) for g in gs
             ]
             del results
             end2 = time.time()
@@ -381,3 +409,12 @@ def collective_links2subgraphs(datasets, h=1,
 
     return train_graphs, val_graphs, test_graphs
     # return train_graphs
+
+
+def cmf_parallel_worker(g_label, ind, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None,
+                        u_features=None, v_features=None, class_values=None):
+    gs, node_labels, node_features = collective_subgraph_extraction_labeling(
+        ind, A, h, sample_ratio, max_nodes_per_hop, u_features, v_features, class_values
+    )
+
+    return g_label, gs, node_labels, node_features

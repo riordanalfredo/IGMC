@@ -223,7 +223,8 @@ def main():
                 None,
                 args.hop*2+1,
                 None,
-                args.testing)
+                args.testing,
+                is_debug=args.debug)
 
             # train_graphs, val_graphs, test_graphs = links2subgraphs(
             #     adj_train,

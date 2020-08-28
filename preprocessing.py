@@ -410,7 +410,7 @@ def load_data_monti(loaded_data, testing=False, post_rating_map=None, is_cmf=Fal
             val_labels, u_val_idx, v_val_idx, test_labels, u_test_idx, v_test_idx, class_values
 
 
-def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, post_rating_map=None, ratio=1.0, is_cmf=False):
+def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, post_rating_map=None, ratio=1.0, is_cmf=False, is_debug=False):
     """
     Loads official train/test split and uses 10% of training samples for validaiton
     For each split computes 1-of-num_classes labels. Also computes training
@@ -671,6 +671,7 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
         variables = {'u_features': u_features, 'v_features': v_features, 'adj_train': rating_mx_train, 'train_labels': train_labels, 'train_u_indices': u_train_idx, 'train_v_indices': v_train_idx,
                      'val_labels': val_labels, 'val_u_indices': u_val_idx, 'val_v_indices': v_val_idx, 'test_labels': test_labels, 'test_u_indices': u_test_idx, 'test_v_indices': v_test_idx,
                      'class_values': class_values}
+
         return ImportedDataset(variables)
     else:
         return u_features, v_features, rating_mx_train, train_labels, u_train_idx, v_train_idx, \
