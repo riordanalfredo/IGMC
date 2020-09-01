@@ -145,12 +145,6 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
     visited_sets = [set([ind[k]]) for k in range(num_node_types)]  # O(M)
     fringe_sets = [set([ind[l]]) for l in range(num_node_types)]  # O(M)
 
-    # NOTE: DONT DELETE! USE THIS AS REFERENCE!
-    # u_nodes, v_nodes = [ind[0]], [ind[1]]
-    # u_dist, v_dist = [0], [0]
-    # u_visited, v_visited = set([ind[0]]), set([ind[1]])
-    # u_fringe, v_fringe = set([ind[0]]), set([ind[1]])
-
     conns = {
         # connections/ relations: u, v, adj_matrix
         # 0: [ind[1], ind[0], u_features],  # u_features-user
@@ -214,8 +208,10 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
     # number of subraphs == connections dictionary size
     num_of_subgraphs = range(0, len(conns)+2, 2)
     subgraphs = []
+
+    # TODO: should I make subgraphs into dictionary?
     subgraphs = [conns[j][2][nodes[j], :][:, nodes[j+1]]
-                 for j in num_of_subgraphs]  # TODO: should I make it into dictionary?
+                 for j in num_of_subgraphs]
 
     # g.add_nodes_from(range(len(u_nodes)), bipartite='u')
     # g.add_nodes_from(range(len(u_nodes), len(
