@@ -206,17 +206,16 @@ class IGMC(GNN):
             )
         concat_states = []
         for conv in self.convs:
-            x = torch.tanh(conv(x, edge_index, edge_type))
+            x = torch.tanh(conv(x, edge_index, edge_type))  # eq 2
             concat_states.append(x)
         concat_states = torch.cat(concat_states, 1)
 
-        entities = []
-        for i in range(0, 2):
-            states.append(data.x[:, i] == 1)
-        x = torch.cat([concat_states[e] for e in entities], 1)
+        users = data.x[:, 0] == 1
+        items = data.x[:, 1] == 1
+        x = torch.cat([concat_states[users], concat_states[items]], 1)  # eq 3
+
         if self.side_features:
             x = torch.cat([x, data.u_feature, data.v_feature], 1)
-
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)

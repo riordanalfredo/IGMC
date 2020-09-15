@@ -36,6 +36,7 @@ def warn_with_traceback(message, category, filename, lineno, file=None, line=Non
 
 
 warnings.showwarning = warn_with_traceback
+# use this method to print
 
 
 def parsers():
@@ -226,30 +227,69 @@ def main():
                 args.testing,
                 is_debug=args.debug)
 
-            # train_graphs, val_graphs, test_graphs = links2subgraphs(
-            #     adj_train,
-            #     train_indices,
-            #     val_indices,
-            #     test_indices,
-            #     train_labels,
-            #     val_labels,
-            #     test_labels,
-            #     args.hop,
-            #     args.sample_ratio,
-            #     args.max_nodes_per_hop,
-            #     u_features,
-            #     v_features,
-            #     args.hop*2+1,
-            #     class_values,
-            #     args.testing
-
+        # Use torch_graph library
+        train_graphs = MyDataset(
+            train_graphs, root='data/{}{}/{}/train'.format(*data_combo))
         if not args.testing:
             val_graphs = MyDataset(
                 val_graphs, root='data/{}{}/{}/val'.format(*data_combo))
         test_graphs = MyDataset(
             test_graphs, root='data/{}{}/{}/test'.format(*data_combo))
-        train_graphs = MyDataset(
-            train_graphs, root='data/{}{}/{}/train'.format(*data_combo))
+
+    # IGMC GNN model (default)
+    if args.transfer:
+        num_relations = args.num_relations
+        multiply_by = args.multiply_by
+    else:
+        class_values = datasets[0].class_values
+        num_relations = len(class_values)
+        multiply_by = 1
+    n_features = 0  # NOTE: considering it is using CMF
+
+    model = IGMC(train_graphs,
+                 latent_dim=[32, 32, 32, 32],
+                 num_relations=num_relations,
+                 num_bases=4,
+                 regression=True,
+                 adj_dropout=args.adj_dropout,
+                 force_undirected=args.force_undirected,
+                 side_features=False,
+                 n_side_features=n_features,
+                 multiply_by=multiply_by)
+
+    def logger(info, model, optimizer):
+        epoch, train_loss, test_rmse = info['epoch'], info['train_loss'], info['test_rmse']
+        with open(os.path.join(args.res_dir, 'log.txt'), 'a') as f:
+            f.write('Epoch {}, train loss {:.4f}, test rmse {:.6f}\n'.format(
+                epoch, train_loss, test_rmse))
+        if type(epoch) == int and epoch % args.save_interval == 0:
+            print('Saving model states...')
+            model_name = os.path.join(
+                args.res_dir, 'model_checkpoint{}.pth'.format(epoch))
+            optimizer_name = os.path.join(
+                args.res_dir, 'optimizer_checkpoint{}.pth'.format(epoch)
+            )
+            if model is not None:
+                torch.save(model.state_dict(), model_name)
+            if optimizer is not None:
+                torch.save(optimizer.state_dict(), optimizer_name)
+
+    # Train under multiple epochs
+    train_multiple_epochs(
+        train_graphs,
+        test_graphs,
+        model,
+        args.epochs,
+        args.batch_size,
+        args.lr,
+        lr_decay_factor=args.lr_decay_factor,
+        lr_decay_step_size=args.lr_decay_step_size,
+        weight_decay=0,
+        ARR=args.ARR,
+        logger=logger,
+        continue_from=args.continue_from,
+        res_dir=args.res_dir
+    )
 
 
 if __name__ == "__main__":

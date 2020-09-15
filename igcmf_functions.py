@@ -91,6 +91,8 @@ def load_side_matrix(loaded_data, train_labels, train_u_indices, train_v_indices
 
 def nx_to_PyGGraph(g, graph_label, node_labels, node_features, max_node_label, class_values):
     # convert networkx graph to pytorch_geometric data format
+    # TODO: bug for the side matrix/side feature graph
+    # Where it should handle
     y = torch.FloatTensor([class_values[graph_label]])
     if len(g.edges()) == 0:
         i, j = [], []
@@ -104,7 +106,7 @@ def nx_to_PyGGraph(g, graph_label, node_labels, node_features, max_node_label, c
     edge_attr = torch.FloatTensor(
         class_values[edge_type]
     ).unsqueeze(1)  # continuous ratings, num_edges * 1
-    x = torch.FloatTensor(one_hot(node_labels, max(node_labels)+1))
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label+1))
     if node_features is not None:
         if type(node_features) == list:
             # node features are only provided for target user and item
@@ -151,7 +153,7 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
         0: [ind[0], ind[1], A],  # user-item
         2: [ind[1], ind[2], v_features],  # item-i_features
     }
-    for i in range(0, len(conns)+2, 2):  # up to 2 loops
+    for i in range(0, len(ind), 2):  # up to 2 loops
         for dist in range(1, h+1):  # for now, we only focus in 1-hop
             # get fringe with neighbors(node,A,is_row)
             fringe_sets[i+1], fringe_sets[i] = neighbors(
@@ -194,19 +196,11 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
             distances[i+1] = distances[i+1] + [dist] * len(fringe_sets[i+1])
 
     # combine similar nodes
-    # TODO: it is still hardcoded and not efficient! Other solution could be not storing the value in the size of subgraph creation earlier.
-    # ls = []
-    # for i in range(len(nodes[1])):
-    #     for j in range(len(nodes[2])):
-    #         if (i == j):
-    #             ls.append(nodes[1][j])
-    #             break
-    # nodes[2] = ls
+    nodes[2] = nodes[1]
     # ----------------------------------------------
 
-    nodes[2] = nodes[1]
     # number of subraphs == connections dictionary size
-    num_of_subgraphs = range(0, len(conns)+2, 2)
+    num_of_subgraphs = range(0, len(ind), 2)
     subgraphs = []
 
     # TODO: should I make subgraphs into dictionary?
@@ -217,6 +211,7 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
     # g.add_nodes_from(range(len(u_nodes), len(
     #     u_nodes)+len(v_nodes)), bipartite='v')
     graphs = []
+    node_labels = []
     for i in range(len(subgraphs)):
         g = nx.Graph()
         '''
@@ -236,11 +231,13 @@ def collective_subgraph_extraction_labeling(inds, A, h=1, sample_ratio=1.0, max_
         edge_types = dict(zip(zip(u, v), r-1))
         nx.set_edge_attributes(g, name='type', values=edge_types)
         graphs.append(g)
+        node_labels.append([x*2 for x in distances[i]] +
+                           [x*2+1 for x in distances[i+1]])
 
-    # get structural node labels with (h * N + 1) formula, where 'h' is number of hop, 'N' is number of node types (4 for now)
-    node_labels = []
     for i in range(num_node_types):
         node_labels += [h*num_node_types+i for h in distances[i]]
+
+    # get structural node labels with (h * N + 1) formula, where 'h' is number of hop, 'N' is number of node types (4 for now)
 
     # NOTE: HARDCODED! IGCMF does not require this anymore.
     # get node features
@@ -289,7 +286,7 @@ def collective_links2subgraphs(datasets, h=1,
                                max_node_label=None,
                                class_values=None,
                                testing=False,
-                               parallel=True,
+                               parallel=False,
                                is_debug=False):  # to use first if statement
 
     # TODO: HARDCODED =========
@@ -338,13 +335,13 @@ def collective_links2subgraphs(datasets, h=1,
                             max(n_labels), max_n_label['max_node_label']
                         )
                         # NOTE: loop each bipartite graph
-                        for g in gs:
-                            g_list.append((g, g_label, n_labels, n_features))
+                        for g, n_label in zip(gs, n_labels):
+                            g_list.append((g, g_label, n_label, n_features))
                     else:
                         # NOTE: loop each bipartite graph
-                        for g in gs:
+                        for g, n_label in zip(gs, n_labels):
                             g_list.append(nx_to_PyGGraph(
-                                g, g_label, n_labels, n_features, max_node_label, class_values
+                                g, g_label, n_label, n_features, max_node_label, class_values
                             ))
                     pbar.update(1)
         else:
@@ -373,9 +370,9 @@ def collective_links2subgraphs(datasets, h=1,
             print("Time eplased for subgraph extraction: {}s".format(end-start))
             print("Transforming to pytorch_geometric graphs...".format(end-start))
             g_list += [
-                nx_to_PyGGraph(g, g_label, n_labels, n_features,
+                nx_to_PyGGraph(g, g_label, n_label, n_features,
                                max_node_label, class_values)
-                for g_label, gs, n_labels, n_features in tqdm(results) for g in gs
+                for g_label, gs, n_labels, n_features in tqdm(results) for g, n_label in zip(gs, n_labels)
             ]
             del results
             end2 = time.time()
