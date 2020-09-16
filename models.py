@@ -214,8 +214,9 @@ class IGMC(GNN):
         items = data.x[:, 1] == 1
         x = torch.cat([concat_states[users], concat_states[items]], 1)  # eq 3
 
-        if self.side_features:
-            x = torch.cat([x, data.u_feature, data.v_feature], 1)
+        # hide this if statement for IGCMF
+        # if self.side_features:
+        #     x = torch.cat([x, data.u_feature, data.v_feature], 1)
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)

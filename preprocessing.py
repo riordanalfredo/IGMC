@@ -564,7 +564,7 @@ def load_official_trainvaltest_split(dataset, testing=False, rating_map=None, po
         movie_df = pd.read_csv(movie_file, sep=sep, header=None,
                                names=movie_headers, engine='python')
 
-        genre_headers = movie_df.columns.values[6:]
+        genre_headers = movie_df.columns.values[5:]
         num_genres = genre_headers.shape[0]
 
         v_features = np.zeros((num_items, num_genres), dtype=np.float32)
