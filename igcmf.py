@@ -185,18 +185,18 @@ def main():
     '''
       4. Get the side feature data, uses data extraction from matlab file (Monti et al)
     '''
-    if args.use_cmf:
-        loaded_data = igcmf_loader(args.data_name, 'user')
-        userFeaturesData = load_data_monti(
-            loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
+    # if args.use_cmf:
+    #     loaded_data = igcmf_loader(args.data_name, 'user')
+    #     userFeaturesData = load_data_monti(
+    #         loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
 
-        loaded_data = igcmf_loader(args.data_name, 'item')
-        itemFeaturesData = load_data_monti(
-            loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
+    #     loaded_data = igcmf_loader(args.data_name, 'item')
+    #     itemFeaturesData = load_data_monti(
+    #         loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
 
-        # add to objects of dataset
-        datasets.append(userFeaturesData)
-        datasets.append(itemFeaturesData)
+    #     # add to objects of dataset
+    #     datasets.append(userFeaturesData)
+    #     datasets.append(itemFeaturesData)
 
     '''
           Extract enclosing subgraphs to build the train/test or train/val/test graph datasets. (Note that we must extract enclosing subgraphs for testmode and valmode separately, since the adj_train is different.)

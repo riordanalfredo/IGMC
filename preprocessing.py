@@ -6,7 +6,7 @@ import scipy.sparse as sp
 from scipy.io import loadmat
 import pickle as pkl
 import os
-import h5py
+from h5py import File
 import pandas as pd
 import pdb
 from igcmf_functions import ImportedDataset
@@ -40,7 +40,7 @@ def load_matlab_file(path_file, name_field):
     warning:
         '.mat' files should be saved in the '-v7.3' format
     """
-    db = h5py.File(path_file, 'r')
+    db = File(path_file, 'r')
     # db = loadmat(path_file)
     ds = db[name_field]
     try:
