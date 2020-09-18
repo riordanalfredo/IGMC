@@ -419,22 +419,67 @@ def main():
             if optimizer is not None:
                 torch.save(optimizer.state_dict(), optimizer_name)
 
-    # Train under multiple epochs
-    train_multiple_epochs(
-        train_graphs,
-        test_graphs,
-        model,
-        args.epochs,
-        args.batch_size,
-        args.lr,
-        lr_decay_factor=args.lr_decay_factor,
-        lr_decay_step_size=args.lr_decay_step_size,
-        weight_decay=0,
-        ARR=args.ARR,
-        logger=logger,
-        continue_from=args.continue_from,
-        res_dir=args.res_dir,
-    )
+    if not args.no_train:
+        # Train under multiple epochs
+        train_multiple_epochs(
+            train_graphs,
+            test_graphs,
+            model,
+            args.epochs,
+            args.batch_size,
+            args.lr,
+            lr_decay_factor=args.lr_decay_factor,
+            lr_decay_step_size=args.lr_decay_step_size,
+            weight_decay=0,
+            ARR=args.ARR,
+            logger=logger,
+            continue_from=args.continue_from,
+            res_dir=args.res_dir,
+        )
+
+    if args.ensemble:
+        if args.data_name == "ml_1m":
+            start_epoch, end_epoch, interval = args.epochs - 15, args.epochs, 5
+        else:
+            start_epoch, end_epoch, interval = args.epochs - 30, args.epochs, 10
+        if args.transfer:
+            checkpoints = [
+                os.path.join(args.transfer, "model_checkpoint%d.pth" % x)
+                for x in range(start_epoch, end_epoch + 1, interval)
+            ]
+            epoch_info = "transfer {}, ensemble of range({}, {}, {})".format(
+                args.transfer, start_epoch, end_epoch, interval
+            )
+        else:
+            checkpoints = [
+                os.path.join(args.res_dir, "model_checkpoint%d.pth" % x)
+                for x in range(start_epoch, end_epoch + 1, interval)
+            ]
+            epoch_info = "ensemble of range({}, {}, {})".format(
+                start_epoch, end_epoch, interval
+            )
+        rmse = test_once(
+            test_graphs,
+            model,
+            args.batch_size,
+            logger=None,
+            ensemble=True,
+            checkpoints=checkpoints,
+        )
+        print("Ensemble test rmse is: {:.6f}".format(rmse))
+    else:
+        if args.transfer:
+            model.load_state_dict(torch.load(args.model_pos))
+            rmse = test_once(test_graphs, model, args.batch_size, logger=None)
+            epoch_info = "transfer {}, epoch {}".format(args.transfer, args.epoch)
+        print("Test rmse is: {:.6f}".format(rmse))
+
+    eval_info = {
+        "epoch": epoch_info,
+        "train_loss": 0,
+        "test_rmse": rmse,
+    }
+    logger(eval_info, None, None)
 
 
 if __name__ == "__main__":

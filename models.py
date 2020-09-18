@@ -303,7 +303,7 @@ class IGCMF(GNN):
         n_side_features=0,
         multiply_by=1,
     ):
-        super(IGMC, self).__init__(
+        super(IGCMF, self).__init__(
             dataset, GCNConv, latent_dim, regression, adj_dropout, force_undirected
         )
         self.multiply_by = multiply_by
