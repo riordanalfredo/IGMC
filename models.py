@@ -353,11 +353,6 @@ class IGCMF(GNN):
             [concat_states[items], concat_states[genres]], 1
         )  # features connections
 
-        # x = torch.cat([x, concat_states[genres].T], 1)
-
-        # hide this if statement for IGCMF
-        # if self.side_features:
-        #     x = torch.cat([x, data.u_feature, data.v_feature], 1)
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)

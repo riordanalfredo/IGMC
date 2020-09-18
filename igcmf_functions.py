@@ -245,167 +245,6 @@ def random_nonzero(index, matrix):
     return random.choice(tpl[1])  # because the first index will always be 0
 
 
-def collective_subgraph_extraction_labeling(
-    inds,
-    A,
-    h=1,
-    sample_ratio=1.0,
-    max_nodes_per_hop=None,
-    u_features=None,
-    v_features=None,
-    class_values=None,
-):
-    # extract the h-hop enclosing subgraph around link 'ind'
-    dist = 0
-    """
-    TODO: must make it dynamic later: u indices, i indices,  i_feature cols, u_feature cols. Also, order matters here.
-     """
-
-    # randomize the number of item_features column index
-    item_index = random_nonzero(inds[1], v_features)
-    ind = (inds[0], inds[1], inds[1], np.int64(item_index))
-
-    num_node_types = len(ind)  # M notation
-    # O(M) need to add u_feature.shape[1]
-    nodes = [[ind[i]] for i in range(num_node_types)]
-    distances = [[0] for _ in range(num_node_types)]  # O(M)
-    visited_sets = [set([ind[k]]) for k in range(num_node_types)]  # O(M)
-    fringe_sets = [set([ind[l]]) for l in range(num_node_types)]  # O(M)
-
-    conns = {
-        # connections/ relations: u, v, adj_matrix
-        # 0: [ind[1], ind[0], u_features],  # u_features-user
-        0: [ind[0], ind[1], A],  # user-item
-        2: [ind[2], ind[3], v_features],  # item-i_features
-    }
-    for i in range(0, len(ind), 2):  # up to 2 loops
-        for dist in range(1, h + 1):  # for now, we only focus in 1-hop
-            # get fringe with neighbors(node,A,is_row)
-            fringe_sets[i + 1], fringe_sets[i] = (
-                neighbors(fringe_sets[i], conns[i][2], True),
-                neighbors(fringe_sets[i + 1], conns[i][2], False),
-            )
-
-            # update fringe based on visited sets
-            fringe_sets[i] = fringe_sets[i] - visited_sets[i]
-            fringe_sets[i + 1] = fringe_sets[i + 1] - visited_sets[i + 1]
-
-            # get visited nodes based on u and v fringes
-            visited_sets[i] = visited_sets[i].union(fringe_sets[i])
-            visited_sets[i + 1] = visited_sets[i + 1].union(fringe_sets[i + 1])
-
-            # use sample ratio (if defined)
-            if sample_ratio < 1.0:
-                fringe_sets[i] = random.sample(
-                    fringe_sets[i], int(sample_ratio * len(fringe_sets[i]))
-                )
-                fringe_sets[i + 1] = random.sample(
-                    fringe_sets[i + 1], int(sample_ratio * len(fringe_sets[i + 1]))
-                )
-
-            # limiting the number of nodes_per hop (if defined)
-            if max_nodes_per_hop is not None:
-                if max_nodes_per_hop < len(fringe_sets[i]):
-                    fringe_sets[i] = random.sample(fringe_sets[i], max_nodes_per_hop)
-                if max_nodes_per_hop < len(fringe_sets[i + 1]):
-                    fringe_sets[i + 1] = random.sample(
-                        fringe_sets[i + 1], max_nodes_per_hop
-                    )
-
-            # stop if there are no fringes on u and v
-            if len(fringe_sets[i]) == 0 and len(fringe_sets[i + 1]) == 0:
-                break
-
-            # update u and v nodes
-            nodes[i] = nodes[i] + list(fringe_sets[i])
-            nodes[i + 1] = nodes[i + 1] + list(fringe_sets[i + 1])
-
-            # update u and v distances
-            distances[i] = distances[i] + [dist] * len(fringe_sets[i])
-            distances[i + 1] = distances[i + 1] + [dist] * len(fringe_sets[i + 1])
-
-    # combine similar nodes
-    nodes[2] = nodes[1]
-    # ----------------------------------------------
-
-    # number of subraphs == connections dictionary size
-    num_of_subgraphs = range(0, len(ind), 2)
-    subgraphs = []
-
-    # TODO: should I make subgraphs into dictionary?
-    subgraphs = [conns[j][2][nodes[j], :][:, nodes[j + 1]] for j in num_of_subgraphs]
-
-    # g.add_nodes_from(range(len(u_nodes)), bipartite='u')
-    # g.add_nodes_from(range(len(u_nodes), len(
-    #     u_nodes)+len(v_nodes)), bipartite='v')
-    graphs = []
-    node_labels = []
-    for i in range(len(subgraphs)):
-        g = nx.Graph()
-        """
-            TODO: IGCMF — current problem in here is the library said it is bipartite. How to make it multipartite graph? or can we do better by building multiple bipartite graphs instead?
-        """
-        # construct nx graph
-        subgraphs[i][0, 0] = 0  # remove link between target nodes
-        g.add_nodes_from(range(len(nodes[i])))
-        g.add_nodes_from(range(len(nodes[i + 1]), len(nodes[i]) + len(nodes[i + 1])))
-        u, v, r = ssp.find(subgraphs[i])  # r is 1, 2... (rating labels + 1)
-        r = r.astype(int)
-        v += len(nodes[i])
-        # g.add_weighted_edges_from(zip(u, v, r))
-        g.add_edges_from(zip(u, v))
-        # transform r back to rating label
-        edge_types = dict(zip(zip(u, v), r - 1))
-        nx.set_edge_attributes(g, name="type", values=edge_types)
-        graphs.append(g)
-        node_labels.append(
-            [x * 2 for x in distances[i]] + [x * 2 + 1 for x in distances[i + 1]]
-        )
-
-    # for i in range(3):
-    #     node_labels += [h*3+i for h in distances[i]]
-
-    # get structural node labels with (h * N + 1) formula, where 'h' is number of hop, 'N' is number of node types (4 for now)
-
-    # NOTE: HARDCODED! IGCMF does not require this anymore.
-    # get node features
-    # if u_features is not None:
-    #     u_features = u_features[u_nodes]
-    # if v_features is not None:
-    #     v_features = v_features[v_nodes]
-    # node_features = None
-    # NOTE: IGCMF does not require this anymore. (ABLATION)
-    # if False:
-    #     # directly use padded node features
-    #     if u_features is not None and v_features is not None:
-    #         u_extended = np.concatenate(
-    #             [u_features, np.zeros(
-    #                 [u_features.shape[0], v_features.shape[1]])], 1
-    #         )
-    #         v_extended = np.concatenate(
-    #             [np.zeros([v_features.shape[0], u_features.shape[1]]),
-    #                 v_features], 1
-    #         )
-    #         node_features = np.concatenate([u_extended, v_extended], 0)
-    # NOTE: IGCMF does not require this anymore. (ABLATION)
-    # if False:
-    #     # use identity features (one-hot encodings of node idxes)
-    #     u_ids = one_hot(u_nodes, A.shape[0]+A.shape[1])
-    #     v_ids = one_hot([x+A.shape[0]
-    #                      for x in v_nodes], A.shape[0]+A.shape[1])
-    #     node_ids = np.concatenate([u_ids, v_ids], 0)
-    #     # node_features = np.concatenate([node_features, node_ids], 1)
-    #     node_features = node_ids
-    # NOTE: IGCMF does not require this anymore.(ABLATION)
-    # if True:
-    #     # only output node features for the target user and item
-    #     if u_features is not None and v_features is not None:
-    #         node_features = [u_features[0], v_features[0]]
-    node_features = None
-
-    return graphs, node_labels, node_features
-
-
 def collective_links2subgraphs(
     datasets,
     h=1,
@@ -416,7 +255,7 @@ def collective_links2subgraphs(
     max_node_label=None,
     class_values=None,
     testing=False,
-    parallel=False,
+    parallel=True,
     is_debug=False,
 ):  # to debug/reduce all size
 
@@ -458,40 +297,38 @@ def collective_links2subgraphs(
 
     def helper(A, links, g_labels):
         g_list = []
+        # create labelling graph
         if not parallel or max_node_label is None:
             with tqdm(total=len(links[0])) as pbar:
-                # TODO: how to make it dynamic?
                 for i, j, g_label in zip(links[0], links[1], g_labels):
-                    # create labelling graph
                     n_features = [u_features[0], v_features[0]]
-                    tpl_list = []
-                    # i and j are indices
+
+                    # prepare the tuple list
+                    nodes_distances_tpl = []
+
+                    # i and j indices
                     nodes, distances = subgraph_extraction(
                         (i, j), A, h, sample_ratio, max_nodes_per_hop
                     )
-                    tpl_list.append((nodes, distances))
+                    nodes_distances_tpl.append((nodes, distances))
+
                     # side matrix index
                     k = random_nonzero(j, v_features)
                     nodes, distances = subgraph_extraction(
                         (j, k), v_features, h, sample_ratio, max_nodes_per_hop
                     )
-                    tpl_list.append((nodes, distances))
+                    nodes_distances_tpl.append((nodes, distances))
 
-                    nodes = [tpl[0] for tpl in tpl_list]
-                    distances = [tpl[1] for tpl in tpl_list]
+                    nodes = [nd[0] for nd in nodes_distances_tpl]
+                    distances = [nd[1] for nd in nodes_distances_tpl]
                     matrices = [A, v_features]  # main, side
                     g, n_label = subgraph_labeling(nodes, distances, matrices)
-                    # gs, n_labels, n_features = collective_subgraph_extraction_labeling(
-                    #     (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features,
-                    #     v_features, class_values
-                    # )
 
                     #
                     if max_node_label is None:
                         max_n_label["max_node_label"] = max(
-                            max(n_labels), max_n_label["max_node_label"]
+                            max(n_label), max_n_label["max_node_label"]
                         )
-                        # NOTE: loop each bipartite graph
                         g_list.append((g, g_label, n_label, n_features))
                     else:
                         # NOTE: loop each bipartite graph
@@ -540,12 +377,12 @@ def collective_links2subgraphs(
             pbar.close()
             end = time.time()
             print("Time eplased for subgraph extraction: {}s".format(end - start))
-            print("Transforming to pytorch_geometric graphs...".format(end - start))
+            print("Transforming to pytorch_geometric graphs... {}s".format(end - start))
             g_list += [
                 nx_to_PyGGraph(
-                    g, g_label, n_label, n_features, max_node_label, class_values
+                    g, g_label, n_labels, n_features, max_node_label, class_values
                 )
-                for g_label, gs, n_labels, n_features in tqdm(results)
+                for g_label, g, n_labels, n_features in tqdm(results)
             ]
             del results
             end2 = time.time()
@@ -591,8 +428,28 @@ def cmf_parallel_worker(
     v_features=None,
     class_values=None,
 ):
-    gs, node_labels, node_features = collective_subgraph_extraction_labeling(
-        ind, A, h, sample_ratio, max_nodes_per_hop, u_features, v_features, class_values
-    )
+    node_features = [u_features[0], v_features[0]]
+    nodes_distances_tpl = []
+    i, j = ind[0], ind[1]
 
-    return g_label, gs, node_labels, node_features
+    # i and j indices
+    nodes, distances = subgraph_extraction(
+        (i, j), A, h, sample_ratio, max_nodes_per_hop
+    )
+    nodes_distances_tpl.append((nodes, distances))
+
+    # side matrix index
+    k = random_nonzero(j, v_features)
+    nodes, distances = subgraph_extraction(
+        (j, k), v_features, h, sample_ratio, max_nodes_per_hop
+    )
+    nodes_distances_tpl.append((nodes, distances))
+
+    nodes = [nd[0] for nd in nodes_distances_tpl]
+    distances = [nd[1] for nd in nodes_distances_tpl]
+    matrices = [A, v_features]  # main, side
+
+    # node labeling
+    g, node_label = subgraph_labeling(nodes, distances, matrices)
+
+    return g_label, g, node_label, node_features
