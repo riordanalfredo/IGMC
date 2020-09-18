@@ -255,7 +255,7 @@ def collective_links2subgraphs(
     max_node_label=None,
     class_values=None,
     testing=False,
-    parallel=True,
+    parallel=False,
     is_debug=False,
 ):  # to debug/reduce all size
 

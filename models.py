@@ -315,10 +315,10 @@ class IGCMF(GNN):
             self.convs.append(
                 gconv(latent_dim[i], latent_dim[i + 1], num_relations, num_bases)
             )
-        self.lin1 = Linear(2 * sum(latent_dim), 128)
+        self.lin1 = Linear(3 * sum(latent_dim), 128)
         self.side_features = side_features
         if side_features:
-            self.lin1 = Linear(2 * sum(latent_dim) + n_side_features, 128)
+            self.lin1 = Linear(3 * sum(latent_dim) + n_side_features, 128)
 
     def forward(self, data):
         start = time.time()
@@ -345,13 +345,13 @@ class IGCMF(GNN):
 
         users = data.x[:, 0] == 1
         items = data.x[:, 1] == 1
+        len(users)
         genres = data.x[:, 2] == 1
 
         # concatenate with the side matrix information
-        x = torch.cat([concat_states[users]], 1)  # eq 3
         x = torch.cat(
-            [concat_states[items], concat_states[genres]], 1
-        )  # features connections
+            [concat_states[users], concat_states[items], concat_states[genres]], 1
+        )  # eq 3
 
         x = F.relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
