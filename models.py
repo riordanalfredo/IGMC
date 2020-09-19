@@ -345,7 +345,6 @@ class IGCMF(GNN):
 
         users = data.x[:, 0] == 1
         items = data.x[:, 1] == 1
-        len(users)
         genres = data.x[:, 2] == 1
 
         # concatenate with the side matrix information
@@ -353,7 +352,7 @@ class IGCMF(GNN):
             [concat_states[users], concat_states[items], concat_states[genres]], 1
         )  # eq 3
 
-        x = F.relu(self.lin1(x))
+        x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)
         if self.regression:
