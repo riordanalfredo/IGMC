@@ -383,7 +383,7 @@ def main():
 
     model = IGCMF(
         train_graphs,
-        latent_dim=[32, 32, 32, 32],  # increase latent dimension to 128
+        latent_dim=[64, 32, 32, 32],  # increase latent dimension to 128
         num_relations=num_relations,
         num_bases=4,
         regression=True,

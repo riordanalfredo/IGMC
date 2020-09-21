@@ -148,7 +148,8 @@ def train(model, optimizer, loader, device, regression=False, ARR=0):
                     gconv.num_relations, gconv.in_channels, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)
-                loss += ARR * reg_loss
+                loss += ARR * reg_loss # ARR is alpha (hyperparameter).
+        # Need to add one more regularization for the side matrix
         loss.backward()
         total_loss += loss.item() * num_graphs(data)
         optimizer.step()

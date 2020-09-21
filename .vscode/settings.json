@@ -1,4 +1,4 @@
 {
-  "python.pythonPath": "/Users/rdalf2/opt/anaconda3/envs/igmc/bin/python",
+  "python.pythonPath": "C:\\Users\\Alfredo\\Anaconda3\\envs\\igmc\\python.exe",
   "python.formatting.provider": "black"
 }

@@ -117,7 +117,7 @@ def nx_to_PyGGraph(
     edge_index = torch.LongTensor([i + j, j + i])
     edge_type_dict = nx.get_edge_attributes(g, "type")
     edge_type = torch.LongTensor([edge_type_dict[(ii, jj)] for ii, jj in zip(i, j)])
-    edge_type = torch.cat([edge_type, edge_type], 0)
+    edge_type = torch.cat([edge_type, edge_type], 0).cuda
     edge_attr = torch.FloatTensor(class_values[edge_type]).unsqueeze(
         1
     )  # continuous ratings, num_edges * 1
@@ -255,7 +255,7 @@ def collective_links2subgraphs(
     max_node_label=None,
     class_values=None,
     testing=False,
-    parallel=False,
+    parallel=True,
     is_debug=False,
 ):  # to debug/reduce all size
 
@@ -265,6 +265,7 @@ def collective_links2subgraphs(
     class_values = main_obj.class_values
     if is_debug:  # use a small number of data to debug
         num_data = 1000
+        print("Use smaller data size: ", num_data)
         main_obj.train_u_indices, main_obj.train_v_indices = (
             main_obj.train_u_indices[:num_data],
             main_obj.train_v_indices[:num_data],
