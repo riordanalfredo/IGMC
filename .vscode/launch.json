@@ -8,7 +8,17 @@
     "type": "python",
     "request": "launch",
     "program": "${file}",
-    "args": ["--data-name", "ml_100k", "--debug", "--use-features", "--use-cmf", "--epochs", "40", "--ensemble"],
+    "args": [
+      "--data-name",
+      "ml_100k",
+      "--debug",
+      "--use-features",
+      "--batch-size",
+      "20",
+      "--epochs",
+      "100",
+      "--ensemble"
+    ],
     "console": "integratedTerminal"
   }]
 }
