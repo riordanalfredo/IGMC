@@ -344,6 +344,7 @@ class IGCMF(GNN):
 
         users = data.x[:, 0] == 1
         items = data.x[:, 1] == 1
+        # Need to generalise it!
         genres = data.x[:, 2] == 1
 
         # concatenate with the side matrix information

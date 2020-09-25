@@ -6,3 +6,4 @@ software/
 data/
 plot_figure.py
 __pycache__/
+.vscode/settings.json
