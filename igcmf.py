@@ -148,6 +148,31 @@ def main():
         for i, x in enumerate(np.arange(1, 6).tolist())
     }  # refer to IGMC to use rating map
 
+    def logger(info, model, optimizer):
+        epoch, train_loss, test_rmse = (
+            info["epoch"],
+            info["train_loss"],
+            info["test_rmse"],
+        )
+        with open(os.path.join(args.res_dir, "log.txt"), "a") as f:
+            f.write(
+                "Epoch {}, train loss {:.4f}, test rmse {:.6f}\n".format(
+                    epoch, train_loss, test_rmse
+                )
+            )
+        if type(epoch) == int and epoch % args.save_interval == 0:
+            print("Saving model states...")
+            model_name = os.path.join(
+                args.res_dir, "model_checkpoint{}.pth".format(epoch)
+            )
+            optimizer_name = os.path.join(
+                args.res_dir, "optimizer_checkpoint{}.pth".format(epoch)
+            )
+            if model is not None:
+                torch.save(model.state_dict(), model_name)
+            if optimizer is not None:
+                torch.save(optimizer.state_dict(), optimizer_name)
+
     """
       1. Prepare train/test (testmode) or train/val/test (valmode) splits
     """
@@ -301,7 +326,7 @@ def main():
 
     model = IGCMF(
         train_graphs,
-        latent_dim=[64, 32, 32, 32],  # increase latent dimension to 128
+        latent_dim=[32, 32, 32, 32],  # increase latent dimension to 128
         num_relations=num_relations,
         num_bases=4,
         regression=True,
@@ -312,30 +337,7 @@ def main():
         multiply_by=multiply_by,
     )
 
-    def logger(info, model, optimizer):
-        epoch, train_loss, test_rmse = (
-            info["epoch"],
-            info["train_loss"],
-            info["test_rmse"],
-        )
-        with open(os.path.join(args.res_dir, "log.txt"), "a") as f:
-            f.write(
-                "Epoch {}, train loss {:.4f}, test rmse {:.6f}\n".format(
-                    epoch, train_loss, test_rmse
-                )
-            )
-        if type(epoch) == int and epoch % args.save_interval == 0:
-            print("Saving model states...")
-            model_name = os.path.join(
-                args.res_dir, "model_checkpoint{}.pth".format(epoch)
-            )
-            optimizer_name = os.path.join(
-                args.res_dir, "optimizer_checkpoint{}.pth".format(epoch)
-            )
-            if model is not None:
-                torch.save(model.state_dict(), model_name)
-            if optimizer is not None:
-                torch.save(optimizer.state_dict(), optimizer_name)
+    
 
     if not args.no_train:
         # Train under multiple epochs
@@ -350,6 +352,7 @@ def main():
             lr_decay_step_size=args.lr_decay_step_size,
             weight_decay=0,
             ARR=args.ARR,
+            test_freq=args.test_freq, 
             logger=logger,
             continue_from=args.continue_from,
             res_dir=args.res_dir,
