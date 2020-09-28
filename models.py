@@ -320,36 +320,45 @@ class IGCMF(GNN):
             self.lin1 = Linear(3 * sum(latent_dim) + n_side_features, 128)
 
     def forward(self, data):
-        start = time.time()
-        x, edge_index, edge_type, batch = (
-            data.x,
-            data.edge_index,
-            data.edge_type,
-            data.batch,
-        )
-        if self.adj_dropout > 0:
-            edge_index, edge_type = dropout_adj(
-                edge_index,
-                edge_type,
-                p=self.adj_dropout,
-                force_undirected=self.force_undirected,
-                num_nodes=len(x),
-                training=self.training,
-            )
-        concat_states = []
-        for conv in self.convs:
-            x = torch.tanh(conv(x, edge_index, edge_type))  # eq 2
-            concat_states.append(x)
-        concat_states = torch.cat(concat_states, 1)
 
-        users = data.x[:, 0] == 1
-        items = data.x[:, 1] == 1
-        genres = data.x[:, 2] == 1
+        # The GNN model
+        start = time.time()
+        
+        def gnn_concat(idx):
+            x, edge_index, edge_type, batch = (
+                data.x,
+                data.edge_index,
+                data.edge_type,
+                data.batch,
+            )
+            u = data.x[:, idx[0]] == 1
+            v = data.x[:, idx[1]] == 1
+            if self.adj_dropout > 0:
+                edge_index, edge_type = dropout_adj(
+                    edge_index,
+                    edge_type,
+                    p=self.adj_dropout,
+                    force_undirected=self.force_undirected,
+                    num_nodes=len(x),
+                    training=self.training,
+                )
+            concat_states = []
+            for conv in self.convs:
+                x = torch.tanh(conv(x, edge_index, edge_type))  # eq 2
+                concat_states.append(x)
+            concat_states = torch.cat(concat_states, 1)
+            x = torch.cat([concat_states[u], concat_states[v]])
+            return x
+
+        users_items_idx = [0,1]
+        items_genre_idx = [1,2]
+        x1 = gnn_concat(users_items_idx)
+        x2 = gnn_concat(items_genre_idx)
 
         # concatenate with the side matrix information
         x = torch.cat(
-            [concat_states[users], concat_states[items], concat_states[genres]], 1
-        )  # eq 3
+            [x1, x2], 1
+        )  
 
         x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
