@@ -9,7 +9,6 @@ import os
 from h5py import File
 import pandas as pd
 import pdb
-from igcmf_functions import ImportedDataset
 from data_utils import load_data, map_data, download_dataset
 
 
@@ -465,40 +464,22 @@ def load_data_monti(
         u_val_idx, v_val_idx = u_val_idx[:num_data], v_val_idx[:num_data]
         u_test_idx, v_test_idx = u_test_idx[:num_data], v_test_idx[:num_data]
 
-    if is_cmf:
-        # for IGCMF, return them as an object instead of tuple of variables
-        variables = {
-            "u_features": u_features,
-            "v_features": v_features,
-            "adj_train": rating_mx_train,
-            "train_labels": train_labels,
-            "train_u_indices": u_train_idx,
-            "train_v_indices": v_train_idx,
-            "val_labels": val_labels,
-            "val_u_indices": u_val_idx,
-            "val_v_indices": v_val_idx,
-            "test_labels": test_labels,
-            "test_u_indices": u_test_idx,
-            "test_v_indices": v_test_idx,
-            "class_values": class_values,
-        }
-        return ImportedDataset(variables)
-    else:
-        return (
-            u_features,
-            v_features,
-            rating_mx_train,
-            train_labels,
-            u_train_idx,
-            v_train_idx,
-            val_labels,
-            u_val_idx,
-            v_val_idx,
-            test_labels,
-            u_test_idx,
-            v_test_idx,
-            class_values,
-        )
+
+    return (
+        u_features,
+        v_features,
+        rating_mx_train,
+        train_labels,
+        u_train_idx,
+        v_train_idx,
+        val_labels,
+        u_val_idx,
+        v_val_idx,
+        test_labels,
+        u_test_idx,
+        v_test_idx,
+        class_values,
+    )
 
 
 def load_official_trainvaltest_split(
@@ -807,38 +788,18 @@ def load_official_trainvaltest_split(
     print("User features shape: " + str(u_features.shape))
     print("Item features shape: " + str(v_features.shape))
 
-    if is_cmf:
-        # for IGCMF, return them as an object instead of tuple of variables
-        variables = {
-            "u_features": u_features,
-            "v_features": v_features,
-            "adj_train": rating_mx_train,
-            "train_labels": train_labels,
-            "train_u_indices": u_train_idx,
-            "train_v_indices": v_train_idx,
-            "val_labels": val_labels,
-            "val_u_indices": u_val_idx,
-            "val_v_indices": v_val_idx,
-            "test_labels": test_labels,
-            "test_u_indices": u_test_idx,
-            "test_v_indices": v_test_idx,
-            "class_values": class_values,
-        }
-
-        return ImportedDataset(variables)
-    else:
-        return (
-            u_features,
-            v_features,
-            rating_mx_train,
-            train_labels,
-            u_train_idx,
-            v_train_idx,
-            val_labels,
-            u_val_idx,
-            v_val_idx,
-            test_labels,
-            u_test_idx,
-            v_test_idx,
-            class_values,
-        )
+    return (
+        u_features,
+        v_features,
+        rating_mx_train,
+        train_labels,
+        u_train_idx,
+        v_train_idx,
+        val_labels,
+        u_val_idx,
+        v_val_idx,
+        test_labels,
+        u_test_idx,
+        v_test_idx,
+        class_values,
+    )
