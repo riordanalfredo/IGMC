@@ -129,7 +129,7 @@ class MyDynamicDataset(Dataset):
 #     edge_index = torch.LongTensor([i + j, j + i])
 #     edge_type_dict = nx.get_edge_attributes(g, "type")
 #     edge_type = torch.LongTensor([edge_type_dict[(ii, jj)] for ii, jj in zip(i, j)])
-#     edge_type = torch.cat([edge_type, edge_type], 0).cuda
+#     edge_type = torch.cat([edge_type, edge_type], 0)
 #     edge_attr = torch.FloatTensor(class_values[edge_type]).unsqueeze(
 #         1
 #     )  # continuous ratings, num_edges * 1
