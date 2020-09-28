@@ -345,7 +345,7 @@ class IGCMF(GNN):
 
             u = data.x[:, idx[0]] == 1
             v = data.x[:, idx[1]] == 1
-            x = torch.cat([concat_states[u], concat_states[v]], 1)
+            x = torch.cat([concat_states[u], concat_states[v]], 0)
             return x
 
         users_items_idx = [0,1]
@@ -354,9 +354,6 @@ class IGCMF(GNN):
         x2 = gnn_concat(items_genre_idx)
 
         # concatenate with the side matrix information
-        x1 = torch.unsqueeze(x1,0)
-        x2 = torch.unsqueeze(x2,0)
-
         x = torch.cat([x1, x2], 1)
         x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
