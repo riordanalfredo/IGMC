@@ -354,7 +354,10 @@ class IGCMF(GNN):
         x2 = gnn_concat(items_genre_idx)
 
         # concatenate with the side matrix information
-        x = torch.stack([x1, x2], 1)  
+        x1 = torch.unsqueeze(x1,0)
+        x2 = torch.unsqueeze(x2,0)
+        
+        x = torch.cat([x1, x2], 1)
         x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)

@@ -14,7 +14,7 @@
       "--debug",
       "--use-features",
       "--batch-size",
-      "20",
+      "10",
       "--epochs",
       "100",
       "--ensemble"
