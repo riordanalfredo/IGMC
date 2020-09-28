@@ -1,5 +1,5 @@
 from tqdm import tqdm
-from util_functions import neighbors, one_hot, parallel_worker
+from util_functions import neighbors, one_hot
 import os
 import sys
 import pdb
@@ -19,120 +19,131 @@ cur_dir = os.path.dirname(os.path.realpath(__file__))
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-class ImportedDataset:
-    def __init__(self, variables):
-        # TODO: create variables validator
 
-        # features
-        self.u_features = variables["u_features"]
-        self.v_features = variables["v_features"]
-        # matrix
-        self.adj_train = variables["adj_train"]
+class MyDataset(InMemoryDataset):
+    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
+                 u_features, v_features, class_values, max_num=None, parallel=True):
+        self.A = A
+        self.links = links
+        self.labels = labels
+        self.h = h
+        self.sample_ratio = sample_ratio
+        self.max_nodes_per_hop = max_nodes_per_hop
+        self.u_features = u_features
+        self.v_features = v_features
+        self.class_values = class_values
+        self.parallel = parallel
+        self.max_num = max_num
+        if max_num is not None:
+            np.random.seed(123)
+            num_links = len(links[0])
+            perm = np.random.permutation(num_links)
+            perm = perm[:max_num]
+            self.links = (links[0][perm], links[1][perm])
+            self.labels = labels[perm]
+        super(MyDataset, self).__init__(root)
+        self.data, self.slices = torch.load(self.processed_paths[0])
 
-        # training labels & indices
-        self.train_labels = variables["train_labels"]
-        self.train_u_indices = variables["train_u_indices"]
-        self.train_v_indices = variables["train_v_indices"]
+    @property
+    def processed_file_names(self):
+        name = 'data.pt'
+        if self.max_num is not None:
+            name = 'data_{}.pt'.format(self.max_num)
+        return [name]
 
-        # validation labels & indices
-        self.val_labels = variables["val_labels"]
-        self.val_u_indices = variables["val_u_indices"]
-        self.val_v_indices = variables["val_v_indices"]
+    def process(self):
+        
+        # Extract enclosing subgraphs and save to disk
+        data_list = collective_links2subgraphs(self.A, self.links, self.labels, self.h, 
+                                    self.sample_ratio, self.max_nodes_per_hop, 
+                                    self.u_features, self.v_features, 
+                                    self.class_values, self.parallel)
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
+        del data_list
 
-        # testing labels & indices
-        self.test_labels = variables["test_labels"]
-        self.test_u_indices = variables["test_u_indices"]
-        self.test_v_indices = variables["test_v_indices"]
+class MyDynamicDataset(Dataset):
+    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
+                 u_features, v_features, class_values, max_num=None):
+        super(MyDynamicDataset, self).__init__(root)
+        self.A = A
+        self.links = links
+        self.labels = labels
+        self.h = h
+        self.sample_ratio = sample_ratio
+        self.max_nodes_per_hop = max_nodes_per_hop
+        self.u_features = u_features
+        self.v_features = v_features
+        self.class_values = class_values
+        if max_num is not None:
+            np.random.seed(123)
+            num_links = len(links[0])
+            perm = np.random.permutation(num_links)
+            perm = perm[:max_num]
+            self.links = (links[0][perm], links[1][perm])
+            self.labels = labels[perm]
 
-        # class_values
-        self.class_values = variables["class_values"]
+    def __len__(self):
+        return len(self.links[0])
 
+    def get(self, idx):
+        # node_features = [self.u_features[0], self.v_features[0]]
+        nodes_distances_tpl = []
+        i, j = self.links[0][idx], self.links[1][idx]
+        g_label = self.labels[idx]
 
-"""
-    A method to split side matrix into train, val, and test data.
-    Slightly similar to load_monti. The difference is the train, val, and test data are depending on the labels and indices of the relation/main matrix.
-"""
+        # i and j indices
+        nodes, distances = subgraph_extraction(
+            (i, j), self.A, self.h, self.sample_ratio, self.max_nodes_per_hop
+        )
+        nodes_distances_tpl.append((nodes, distances))
 
+        # side matrix index (item features)
+        k = random_nonzero(j, self.v_features)
+        nodes, distances = subgraph_extraction(
+            (j, k), self.v_features, self.h, self.sample_ratio, self.max_nodes_per_hop, g_label
+        )
+        nodes_distances_tpl.append((nodes, distances))
+        nodes = [nd[0] for nd in nodes_distances_tpl]
+        distances = [nd[1] for nd in nodes_distances_tpl]
+        matrices = [self.A, self.v_features]  # main, side
 
-def load_side_matrix(
-    loaded_data,
-    train_labels,
-    train_u_indices,
-    train_v_indices,
-    val_labels,
-    val_u_indices,
-    val_v_indices,
-    test_labels,
-    test_u_indices,
-    test_v_indices,
-    is_testing=False,
-    is_cmf=True,
-):
-    M = loaded_data["M"]
-    Otraining = loaded_data["Otraining"]
-    Otest = loaded_data["Otest"]
-    num_users = loaded_data["num_users"]
-    num_items = loaded_data["num_items"]
-    u_features = loaded_data["u_features"]
-    v_features = loaded_data["v_features"]
+        # node labeling
+        tmp = subgraph_labeling(nodes, distances, matrices, class_values=self.class_values, h= self.h, g_label=g_label)
 
-    # get labels
-    u_nodes_ratings = np.where(M)[0]  # nonzeros label u
-    v_nodes_ratings = np.where(M)[1]  # nonzeros label v
-    ratings = M[np.where(M)]  # dot product result
-
-    # specify types
-    u_nodes_ratings, v_nodes_ratings = (
-        u_nodes_ratings.astype(np.int64),
-        v_nodes_ratings.astype(np.int32),
-    )
-    ratings = ratings.astype(np.float64)
-
-    # re-assign
-    u_nodes = u_nodes_ratings
-    v_nodes = v_nodes_ratings
-
-    print("number of u nodes = ", len(set(u_nodes)))
-    print("number of v nodes = ", len(set(v_nodes)))
-
-    return u_nodes
-
+        return construct_pyg_graph(*tmp)
 
 """
     Method to convert networkx graph to PyGGraph format using pytorch.
 """
 
 
-def nx_to_PyGGraph(
-    g, graph_label, node_labels, node_features, max_node_label, class_values
-):
-    # convert networkx graph to pytorch_geometric data format
-    # TODO: bug for the side matrix/side feature graph
-    # Where it should handle
-    y = torch.FloatTensor([class_values[graph_label]])
-    if len(g.edges()) == 0:
-        i, j = [], []
-    else:
-        i, j = zip(*g.edges())
-    edge_index = torch.LongTensor([i + j, j + i])
-    edge_type_dict = nx.get_edge_attributes(g, "type")
-    edge_type = torch.LongTensor([edge_type_dict[(ii, jj)] for ii, jj in zip(i, j)])
-    edge_type = torch.cat([edge_type, edge_type], 0).cuda
-    edge_attr = torch.FloatTensor(class_values[edge_type]).unsqueeze(
-        1
-    )  # continuous ratings, num_edges * 1
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
+# def nx_to_PyGGraph(
+#     g, graph_label, node_labels, node_features, max_node_label, class_values
+# ):
+#     y = torch.FloatTensor([class_values[graph_label]])
+#     if len(g.edges()) == 0:
+#         i, j = [], []
+#     else:
+#         i, j = zip(*g.edges())
+#     edge_index = torch.LongTensor([i + j, j + i])
+#     edge_type_dict = nx.get_edge_attributes(g, "type")
+#     edge_type = torch.LongTensor([edge_type_dict[(ii, jj)] for ii, jj in zip(i, j)])
+#     edge_type = torch.cat([edge_type, edge_type], 0).cuda
+#     edge_attr = torch.FloatTensor(class_values[edge_type]).unsqueeze(
+#         1
+#     )  # continuous ratings, num_edges * 1
+#     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
 
-    data = Data(x, edge_index, edge_attr=edge_attr, y=y)
-    data.edge_type = edge_type
+#     data = Data(x, edge_index, edge_attr=edge_attr, y=y)
+#     data.edge_type = edge_type
 
-    return data
+#     return data
 
 
 """
     Method to extract the subgraph from collective matrices
 """
-
 
 def subgraph_extraction(
     inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None, class_values=None
@@ -191,9 +202,11 @@ def subgraph_extraction(
     return nodes, distances
 
 
-def subgraph_labeling(raw_nodes, raw_distances, matrices):
+def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1,g_label=1):
+    # TODO: make it dynamic by handling multiple matrices later
     main_matrix = matrices[0]
     side_matrix = matrices[1]
+    y_genre = 1 # genre is always because it was selected to be 1 before.
     u_nodes, v_nodes, w_nodes = raw_nodes[0][0], raw_nodes[0][1], raw_nodes[1][1]
     u_dist, v_dist, w_dist = (
         raw_distances[0][0],
@@ -202,42 +215,36 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices):
     )
     nodes = [u_nodes, v_nodes, w_nodes]
     distances = [u_dist, v_dist, w_dist]
-    # combined_nodes = np.concatenate([u_nodes, v_nodes], axis=None)
-
+    
     subgraphs = []
     for i in range(1, len(matrices) + 1):
         subgraph = matrices[i - 1][nodes[i - 1], :][:, nodes[i]]
         subgraph[0, 0] = 0
         subgraphs.append(subgraph)
 
-    g = nx.Graph()
-    g.add_nodes_from(range(len(u_nodes)), bipartite="u")
-    g.add_nodes_from(range(len(u_nodes), len(u_nodes) + len(v_nodes)), bipartite="v")
-    g.add_nodes_from(
-        range(len(u_nodes) + len(v_nodes), len(u_nodes) + len(v_nodes) + len(w_nodes)),
-        bipartite="w",
-    )
     u, v, r = ssp.find(subgraphs[0])  # r is 1, 2... (rating labels + 1)
     x, w, rs = ssp.find(subgraphs[1])  # y is 1 (genre exist)
     r = r.astype(int)
     rs = rs.astype(int)
 
-    v += len(u_nodes)
-    w += len(u_nodes) + len(v_nodes)
-    # g.add_weighted_edges_from(zip(u, v, r))
-    g.add_edges_from(zip(u, v))
-    g.add_edges_from(zip(v, w))
+    v += len(u_nodes) # starting point
+    w += len(u_nodes) + len(v_nodes) # starting point
 
-    edge_types = dict(zip(zip(u, v), r - 1))  # transform r back to rating label
-    edge_types.update(zip(zip(v, w), rs))
-    nx.set_edge_attributes(g, name="type", values=edge_types)
+    y = class_values[g_label]
+
+    r =  r - 1 # transform r back to rating label
+    rs = rs # transform rating side back to original label
 
     # Node-labeling process
     node_labels = []
     for i in range(len(distances)):
         node_labels += [h * len(distances) + i for h in distances[i]]
 
-    return g, node_labels
+    # Set max node label (2 matrix, 3 relations, 1 hop)
+    max_node_label = h * (len(matrices) * len(distances))
+    triplet = {"u":u, "v":v, "r":r}
+
+    return triplet, node_labels, max_node_label, y 
 
 
 def random_nonzero(index, matrix):
@@ -246,181 +253,83 @@ def random_nonzero(index, matrix):
 
 
 def collective_links2subgraphs(
-    datasets,
+    A,
+    links,
+    labels,
     h=1,
     sample_ratio=1.0,
     max_nodes_per_hop=None,
     u_features=None,
     v_features=None,
-    max_node_label=None,
     class_values=None,
-    testing=False,
     parallel=True,
-    is_debug=False,
-):  # to debug/reduce all size
-
-    # TODO: HARDCODED =========
-    main_obj = datasets[0]
-    A = main_obj.adj_train
-    class_values = main_obj.class_values
-    if is_debug:  # use a small number of data to debug
-        num_data = 1000
-        print("Use smaller data size: ", num_data)
-        main_obj.train_u_indices, main_obj.train_v_indices = (
-            main_obj.train_u_indices[:num_data],
-            main_obj.train_v_indices[:num_data],
-        )
-        main_obj.val_u_indices, main_obj.val_v_indices = (
-            main_obj.val_u_indices[:num_data],
-            main_obj.val_v_indices[:num_data],
-        )
-        main_obj.test_u_indices, main_obj.test_v_indices = (
-            main_obj.test_u_indices[:num_data],
-            main_obj.test_v_indices[:num_data],
-        )
-    train_indices = (main_obj.train_u_indices, main_obj.train_v_indices)
-    val_indices = (main_obj.val_u_indices, main_obj.val_v_indices)
-    test_indices = (main_obj.test_u_indices, main_obj.test_v_indices)
-    train_labels = main_obj.train_labels
-    val_labels = main_obj.val_labels
-    test_labels = main_obj.test_labels
-    u_features = main_obj.u_features
-    v_features = main_obj.v_features
-
-    # ------------------------
-
+):  
     # extract enclosing subgraphs
-    if max_node_label is None:  # if not provided, infer from graphs
-        max_n_label = {"max_node_label": 0}
+    print('Enclosing subgraph extraction begins...')
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (2 * 3)
-
-    def helper(A, links, g_labels):
-        g_list = []
-        # create labelling graph
-        if not parallel or max_node_label is None:
-            with tqdm(total=len(links[0])) as pbar:
-                for i, j, g_label in zip(links[0], links[1], g_labels):
-                    n_features = [u_features[0], v_features[0]]
-
-                    # prepare the tuple list
-                    nodes_distances_tpl = []
-
-                    # i and j indices
-                    nodes, distances = subgraph_extraction(
-                        (i, j), A, h, sample_ratio, max_nodes_per_hop
-                    )
-                    nodes_distances_tpl.append((nodes, distances))
-
-                    # side matrix index
-                    k = random_nonzero(j, v_features)
-                    nodes, distances = subgraph_extraction(
-                        (j, k), v_features, h, sample_ratio, max_nodes_per_hop
-                    )
-                    nodes_distances_tpl.append((nodes, distances))
-
-                    nodes = [nd[0] for nd in nodes_distances_tpl]
-                    distances = [nd[1] for nd in nodes_distances_tpl]
-                    matrices = [A, v_features]  # main, side
-                    g, n_label = subgraph_labeling(nodes, distances, matrices)
-
-                    #
-                    if max_node_label is None:
-                        max_n_label["max_node_label"] = max(
-                            max(n_label), max_n_label["max_node_label"]
-                        )
-                        g_list.append((g, g_label, n_label, n_features))
-                    else:
-                        # NOTE: loop each bipartite graph
-                        g_list.append(
-                            nx_to_PyGGraph(
-                                g,
-                                g_label,
-                                n_label,
-                                n_features,
-                                max_node_label,
-                                class_values,
-                            )
-                        )
-
-                    pbar.update(1)
-        else:
-            start = time.time()
-            pool = mp.Pool(mp.cpu_count())
-            results = pool.starmap_async(
-                cmf_parallel_worker,
-                [
-                    (
-                        g_label,
-                        (i, j),
-                        A,
-                        h,
-                        sample_ratio,
-                        max_nodes_per_hop,
-                        u_features,
-                        v_features,
-                        class_values,
-                    )
-                    for i, j, g_label in zip(links[0], links[1], g_labels)
-                ],
-            )
-            remaining = results._number_left
-            pbar = tqdm(total=remaining)
-            while True:
-                pbar.update(remaining - results._number_left)
-                if results.ready():
-                    break
-                remaining = results._number_left
-                time.sleep(1)
-            results = results.get()
-            pool.close()
-            pbar.close()
-            end = time.time()
-            print("Time eplased for subgraph extraction: {}s".format(end - start))
-            print("Transforming to pytorch_geometric graphs... {}s".format(end - start))
-            g_list += [
-                nx_to_PyGGraph(
-                    g, g_label, n_labels, n_features, max_node_label, class_values
+    g_list = []
+    # create labelling graph
+    if not parallel or max_node_label is None:
+        with tqdm(total=len(links[0])) as pbar:
+            for i, j, g_label in zip(links[0], links[1], labels):
+                tmp = subgraph_extraction_labeling(
+                    (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features, 
+                    v_features, class_values, g_label
                 )
-                for g_label, g, n_labels, n_features in tqdm(results)
-            ]
-            del results
-            end2 = time.time()
-            print(
-                "Time eplased for transforming to pytorch_geometric graphs: {}s".format(
-                    end2 - end
-                )
-            )
-        return g_list
-
-    print("Enclosing subgraph extraction begins...")
-
-    train_graphs = helper(A, train_indices, train_labels)
-    if not testing:
-        val_graphs = helper(A, val_indices, val_labels)
+                data = construct_pyg_graph(*tmp)
+                g_list.append(data)
+                pbar.update(1)
     else:
-        val_graphs = []
-    test_graphs = helper(A, test_indices, test_labels)
+        start = time.time()
+        pool = mp.Pool(mp.cpu_count())
+        results = pool.starmap_async(
+            subgraph_extraction_labeling,
+            [
+                (
+                    (i, j), A,h,sample_ratio,max_nodes_per_hop,
+                    u_features, v_features, class_values, g_label
+                )
+                for i, j, g_label in zip(links[0], links[1], labels)
+            ],
+        )
+        remaining = results._number_left
+        pbar = tqdm(total=remaining)
+        while True:
+            pbar.update(remaining - results._number_left)
+            if results.ready(): break
+            remaining = results._number_left
+            time.sleep(1)
+        results = results.get()
+        pool.close()
+        pbar.close()
+        end = time.time()
+        print("Time eplased for subgraph extraction: {}s".format(end - start))
+        print("Transforming to pytorch_geometric graphs... {}s".format(end - start))
+        g_list = []
+        while results:
+            tmp = results.pop()
+            g_list.append(construct_pyg_graph(*tmp))
+            pbar.update(1)
+        pbar.close()
+        end2 = time.time()
+        print("Time eplased for transforming to pytorch_geometric graphs: {}s".format(end2 - end))
+    return g_list
 
-    # if max_node_label is None:
-    #     train_graphs = [
-    #         nx_to_PyGGraph(*x, **max_n_label, class_values=class_values) for x in train_graphs
-    #     ]
-    #     val_graphs = [
-    #         nx_to_PyGGraph(*x, **max_n_label, class_values=class_values) for x in val_graphs
-    #     ]
-    #     test_graphs = [
-    #         nx_to_PyGGraph(*x, **max_n_label, class_values=class_values) for x in test_graphs
-    #     ]
+def construct_pyg_graph(triplet, node_labels, max_node_label, y):
+    # (u,v,r), (v,w,rs)
+    u, v, r = triplet["u"], triplet["v"], triplet["r"]
+    u, v = torch.LongTensor(u), torch.LongTensor(v)
+    r = torch.LongTensor(r)  
+    edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
+    edge_type = torch.cat([r, r])
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label+1))
+    y = torch.FloatTensor([y])
+    data = Data(x, edge_index, edge_type=edge_type, y=y)
+    return data
 
-    return train_graphs, val_graphs, test_graphs
-    # return train_graphs
-
-
-def cmf_parallel_worker(
-    g_label,
-    ind,
+def subgraph_extraction_labeling( ind,
     A,
     h=1,
     sample_ratio=1.0,
@@ -428,6 +337,7 @@ def cmf_parallel_worker(
     u_features=None,
     v_features=None,
     class_values=None,
+    g_label=1,
 ):
     node_features = [u_features[0], v_features[0]]
     nodes_distances_tpl = []
@@ -451,6 +361,6 @@ def cmf_parallel_worker(
     matrices = [A, v_features]  # main, side
 
     # node labeling
-    g, node_label = subgraph_labeling(nodes, distances, matrices)
-
-    return g_label, g, node_label, node_features
+    res = subgraph_labeling(nodes, distances, matrices, class_values, h, g_label)
+    # data = construct_pyg_graph(*res)
+    return res

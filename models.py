@@ -314,25 +314,20 @@ class IGCMF(GNN):
             self.convs.append(
                 gconv(latent_dim[i], latent_dim[i + 1], num_relations, num_bases)
             )
-        self.lin1 = Linear(3 * sum(latent_dim), 128)
+        self.lin1 = Linear(2 * sum(latent_dim), 128)
         self.side_features = side_features
         if side_features:
-            self.lin1 = Linear(3 * sum(latent_dim) + n_side_features, 128)
+            self.lin1 = Linear(2 * sum(latent_dim) + n_side_features, 128)
 
     def forward(self, data):
-
         # The GNN model
         start = time.time()
-        
         def gnn_concat(idx):
-            x, edge_index, edge_type, batch = (
+            x, edge_index, edge_type = (
                 data.x,
                 data.edge_index,
                 data.edge_type,
-                data.batch,
             )
-            u = data.x[:, idx[0]] == 1
-            v = data.x[:, idx[1]] == 1
             if self.adj_dropout > 0:
                 edge_index, edge_type = dropout_adj(
                     edge_index,
@@ -347,7 +342,10 @@ class IGCMF(GNN):
                 x = torch.tanh(conv(x, edge_index, edge_type))  # eq 2
                 concat_states.append(x)
             concat_states = torch.cat(concat_states, 1)
-            x = torch.cat([concat_states[u], concat_states[v]])
+
+            u = data.x[:, idx[0]] == 1
+            v = data.x[:, idx[1]] == 1
+            x = torch.cat([concat_states[u], concat_states[v]], 1)
             return x
 
         users_items_idx = [0,1]
@@ -356,10 +354,7 @@ class IGCMF(GNN):
         x2 = gnn_concat(items_genre_idx)
 
         # concatenate with the side matrix information
-        x = torch.cat(
-            [x1, x2], 1
-        )  
-
+        x = torch.stack([x1, x2], 1)  
         x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.lin2(x)
