@@ -261,11 +261,9 @@ def eval_loss_ensemble(
             # NOTE: edited to use different y (y1 rating, y2 genre).
             if i == 0:
                 ys.append(data.y1.view(-1))
-                ys.append(data.y2.view(-1))
             with torch.no_grad():
                 out1, out2 = model(data)
                 outs.append(out1)
-                outs.append(out2)
         if i == 0:
             ys = torch.cat(ys, 0)
         outs = torch.cat(outs, 0).view(-1, 1)
