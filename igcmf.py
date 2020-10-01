@@ -18,7 +18,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from util_functions import *
 from data_utils import *
 from preprocessing import *
-from train_eval import *
+from igcmf_train_eval import *
 from models import *
 from igcmf_functions import *
 
