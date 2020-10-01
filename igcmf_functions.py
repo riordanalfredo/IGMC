@@ -365,7 +365,7 @@ def construct_pyg_graph(indexes, node_labels, max_node_label, y, ratings):
     u, v, w, z  = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w), torch.LongTensor(z)
     r, sg = torch.LongTensor(ratings[0]), torch.LongTensor(ratings[1])
     # I am not sure how to include this
-    edge_index = torch.stack([torch.cat([u, v]), torch.cat([u, w]), torch.cat([z,w]), torch.cat([w,z])], 0)
+    edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u]), torch.cat([v,w]), torch.cat([w,v])], 0)
     edge_type = torch.cat([r, r, sg, sg]) # why it works? 
     y_final = torch.stack([torch.FloatTensor([y[0]]), torch.FloatTensor([y[1]])], 1)
     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
