@@ -321,8 +321,7 @@ class IGCMF(GNN):
 
     def forward(self, data):
         # The GNN model
-        start = time.time()
-        def gnn_concat(idx):
+        def gnn_concat(idx, iteration):
             x, edge_index, edge_type = (
                 data.x,
                 data.edge_index,
@@ -346,19 +345,20 @@ class IGCMF(GNN):
             u = data.x[:, idx[0]] == 1
             v = data.x[:, idx[1]] == 1
             x = torch.cat([concat_states[u], concat_states[v]], 1)
-            return x
+            x = F.leaky_relu(self.lin1(x))
+            x = F.dropout(x, p=0.5, training=self.training)
+            x = self.lin2(x)
+            return x[:, 0] * self.multiply_by
 
-        users_items_idx = [0,1]
-        items_genre_idx = [1,2]
-        x1 = gnn_concat(users_items_idx)
-        x2 = gnn_concat(items_genre_idx)
+        users_items_idx = [0, 1]
+        items_genre_idx = [1, 2]
+        x1 = gnn_concat(users_items_idx, 0)
+        x2 = gnn_concat(items_genre_idx, 1)
 
-        # concatenate with the side matrix information
-        x = torch.stack([x1, x2], 0)
-        x = F.leaky_relu(self.lin1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin2(x)
+        # # concatenate with the side matrix information
+        # x = torch.stack([x1, x2], 0)
+
         if self.regression:
-            return x[1][:, 0] * self.multiply_by
+            return x1, x2
         else:
-            return F.log_softmax(x, dim=-1)
+            return F.log_softmax(x2, dim=-1)
