@@ -345,10 +345,12 @@ class IGCMF(GNN):
             u = data.x[:, idx[0]] == 1
             v = data.x[:, idx[1]] == 1
             x = torch.cat([concat_states[u], concat_states[v]], 1)
+
+            # MLP
             x = F.leaky_relu(self.lin1(x))
             x = F.dropout(x, p=0.5, training=self.training)
             x = self.lin2(x)
-            return x[:, 0] * self.multiply_by
+            return x
 
         users_items_idx = [0, 1]
         items_genre_idx = [1, 2]
@@ -357,6 +359,9 @@ class IGCMF(GNN):
 
         # # concatenate with the side matrix information
         # x = torch.stack([x1, x2], 0)
+
+        x1 = x1[:, 0] * self.multiply_by
+        x2 = F.log_softmax(x2, dim=-1)
 
         if self.regression:
             return x1, x2

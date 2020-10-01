@@ -41,94 +41,222 @@ warnings.showwarning = warn_with_traceback
 def parsers():
     # Arguments
     parser = argparse.ArgumentParser(
-        description='Inductive Graph-based Collevtive Matrix Factorization')
+        description="Inductive Graph-based Collevtive Matrix Factorization"
+    )
     # general settings
-    parser.add_argument('--testing', action='store_true', default=False,
-                        help='if set, use testing mode which splits all ratings into train/test;\
+    parser.add_argument(
+        "--testing",
+        action="store_true",
+        default=False,
+        help="if set, use testing mode which splits all ratings into train/test;\
                         otherwise, use validation model which splits all ratings into \
-                        train/val/test and evaluate on val only')
-    parser.add_argument('--no-train', action='store_true', default=False,
-                        help='if set, skip the training and directly perform the \
-                        transfer/ensemble/visualization')
-    parser.add_argument('--debug', action='store_true', default=False,
-                        help='turn on debugging mode which uses a small number of data')
-    parser.add_argument('--data-name', default='ml_100k', help='dataset name')
-    parser.add_argument('--data-appendix', default='', 
-                        help='what to append to save-names when saving datasets')
-    parser.add_argument('--save-appendix', default='', 
-                        help='what to append to save-names when saving results')
-    parser.add_argument('--max-train-num', type=int, default=None, 
-                        help='set maximum number of train data to use')
-    parser.add_argument('--max-val-num', type=int, default=None, 
-                        help='set maximum number of val data to use')
-    parser.add_argument('--max-test-num', type=int, default=None, 
-                        help='set maximum number of test data to use')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
-                        help='random seed (default: 1)')
-    parser.add_argument('--data-seed', type=int, default=1234, metavar='S',
-                        help='seed to shuffle data (1234,2341,3412,4123,1324 are used), \
-                        valid only for ml_1m and ml_10m')
-    parser.add_argument('--reprocess', action='store_true', default=False,
-                        help='if True, reprocess data instead of using prestored .pkl data')
-    parser.add_argument('--dynamic-train', action='store_true', default=False,
-                        help='extract training enclosing subgraphs on the fly instead of \
-                        storing in disk; works for large datasets that cannot fit into memory')
-    parser.add_argument('--dynamic-test', action='store_true', default=False)
-    parser.add_argument('--dynamic-val', action='store_true', default=False)
-    parser.add_argument('--keep-old', action='store_true', default=False,
-                        help='if True, do not overwrite old .py files in the result folder')
-    parser.add_argument('--save-interval', type=int, default=10,
-                        help='save model states every # epochs ')
+                        train/val/test and evaluate on val only",
+    )
+    parser.add_argument(
+        "--no-train",
+        action="store_true",
+        default=False,
+        help="if set, skip the training and directly perform the \
+                        transfer/ensemble/visualization",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="turn on debugging mode which uses a small number of data",
+    )
+    parser.add_argument("--data-name", default="ml_100k", help="dataset name")
+    parser.add_argument(
+        "--data-appendix",
+        default="",
+        help="what to append to save-names when saving datasets",
+    )
+    parser.add_argument(
+        "--save-appendix",
+        default="",
+        help="what to append to save-names when saving results",
+    )
+    parser.add_argument(
+        "--max-train-num",
+        type=int,
+        default=None,
+        help="set maximum number of train data to use",
+    )
+    parser.add_argument(
+        "--max-val-num",
+        type=int,
+        default=None,
+        help="set maximum number of val data to use",
+    )
+    parser.add_argument(
+        "--max-test-num",
+        type=int,
+        default=None,
+        help="set maximum number of test data to use",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=1, metavar="S", help="random seed (default: 1)"
+    )
+    parser.add_argument(
+        "--data-seed",
+        type=int,
+        default=1234,
+        metavar="S",
+        help="seed to shuffle data (1234,2341,3412,4123,1324 are used), \
+                        valid only for ml_1m and ml_10m",
+    )
+    parser.add_argument(
+        "--reprocess",
+        action="store_true",
+        default=False,
+        help="if True, reprocess data instead of using prestored .pkl data",
+    )
+    parser.add_argument(
+        "--dynamic-train",
+        action="store_true",
+        default=False,
+        help="extract training enclosing subgraphs on the fly instead of \
+                        storing in disk; works for large datasets that cannot fit into memory",
+    )
+    parser.add_argument("--dynamic-test", action="store_true", default=False)
+    parser.add_argument("--dynamic-val", action="store_true", default=False)
+    parser.add_argument(
+        "--keep-old",
+        action="store_true",
+        default=False,
+        help="if True, do not overwrite old .py files in the result folder",
+    )
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=10,
+        help="save model states every # epochs ",
+    )
     # subgraph extraction settings
-    parser.add_argument('--hop', default=1, metavar='S', 
-                        help='enclosing subgraph hop number')
-    parser.add_argument('--sample-ratio', type=float, default=1.0, 
-                        help='if < 1, subsample nodes per hop according to the ratio')
-    parser.add_argument('--max-nodes-per-hop', default=10000, 
-                        help='if > 0, upper bound the # nodes per hop by another subsampling')
-    parser.add_argument('--use-features', action='store_true', default=False,
-                        help='whether to use node features (side information)')
+    parser.add_argument(
+        "--hop", default=1, metavar="S", help="enclosing subgraph hop number"
+    )
+    parser.add_argument(
+        "--sample-ratio",
+        type=float,
+        default=1.0,
+        help="if < 1, subsample nodes per hop according to the ratio",
+    )
+    parser.add_argument(
+        "--max-nodes-per-hop",
+        default=10000,
+        help="if > 0, upper bound the # nodes per hop by another subsampling",
+    )
+    parser.add_argument(
+        "--use-features",
+        action="store_true",
+        default=False,
+        help="whether to use node features (side information)",
+    )
     # edge dropout settings
-    parser.add_argument('--adj-dropout', type=float, default=0.2, 
-                        help='if not 0, random drops edges from adjacency matrix with this prob')
-    parser.add_argument('--force-undirected', action='store_true', default=False, 
-                        help='in edge dropout, force (x, y) and (y, x) to be dropped together')
+    parser.add_argument(
+        "--adj-dropout",
+        type=float,
+        default=0.2,
+        help="if not 0, random drops edges from adjacency matrix with this prob",
+    )
+    parser.add_argument(
+        "--force-undirected",
+        action="store_true",
+        default=False,
+        help="in edge dropout, force (x, y) and (y, x) to be dropped together",
+    )
     # optimization settings
-    parser.add_argument('--continue-from', type=int, default=None, 
-                        help="from which epoch's checkpoint to continue training")
-    parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
-                        help='learning rate (default: 1e-3)')
-    parser.add_argument('--lr-decay-step-size', type=int, default=50,
-                        help='decay lr by factor A every B steps')
-    parser.add_argument('--lr-decay-factor', type=float, default=0.1,
-                        help='decay lr by factor A every B steps')
-    parser.add_argument('--epochs', type=int, default=80, metavar='N',
-                        help='number of epochs to train')
-    parser.add_argument('--batch-size', type=int, default=50, metavar='N',
-                        help='batch size during training')
-    parser.add_argument('--test-freq', type=int, default=1, metavar='N',
-                        help='test every n epochs')
-    parser.add_argument('--ARR', type=float, default=0.001, 
-                        help='The adjacenct rating regularizer. If not 0, regularize the \
+    parser.add_argument(
+        "--continue-from",
+        type=int,
+        default=None,
+        help="from which epoch's checkpoint to continue training",
+    )
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=1e-3,
+        metavar="LR",
+        help="learning rate (default: 1e-3)",
+    )
+    parser.add_argument(
+        "--lr-decay-step-size",
+        type=int,
+        default=50,
+        help="decay lr by factor A every B steps",
+    )
+    parser.add_argument(
+        "--lr-decay-factor",
+        type=float,
+        default=0.1,
+        help="decay lr by factor A every B steps",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=80, metavar="N", help="number of epochs to train"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=50,
+        metavar="N",
+        help="batch size during training",
+    )
+    parser.add_argument(
+        "--test-freq", type=int, default=1, metavar="N", help="test every n epochs"
+    )
+    parser.add_argument(
+        "--ARR",
+        type=float,
+        default=0.001,
+        help="The adjacenct rating regularizer. If not 0, regularize the \
                         differences between graph convolution parameters W associated with\
-                        adjacent ratings')
+                        adjacent ratings",
+    )
     # transfer learning, ensemble, and visualization settings
-    parser.add_argument('--transfer', default='',
-                        help='if not empty, load the pretrained models in this path')
-    parser.add_argument('--num-relations', type=int, default=5,
-                        help='if transfer, specify num_relations in the transferred model')
-    parser.add_argument('--multiply-by', type=int, default=1,
-                        help='if transfer, specify how many times to multiply the predictions by')
-    parser.add_argument('--visualize', action='store_true', default=False,
-                        help='if True, load a pretrained model and do visualization exps')
-    parser.add_argument('--ensemble', action='store_true', default=False,
-                        help='if True, load a series of model checkpoints and ensemble the results')
-    parser.add_argument('--standard-rating', action='store_true', default=False,
-                        help='if True, maps all ratings to standard 1, 2, 3, 4, 5 before training')
+    parser.add_argument(
+        "--transfer",
+        default="",
+        help="if not empty, load the pretrained models in this path",
+    )
+    parser.add_argument(
+        "--num-relations",
+        type=int,
+        default=5,
+        help="if transfer, specify num_relations in the transferred model",
+    )
+    parser.add_argument(
+        "--multiply-by",
+        type=int,
+        default=1,
+        help="if transfer, specify how many times to multiply the predictions by",
+    )
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        default=False,
+        help="if True, load a pretrained model and do visualization exps",
+    )
+    parser.add_argument(
+        "--ensemble",
+        action="store_true",
+        default=False,
+        help="if True, load a series of model checkpoints and ensemble the results",
+    )
+    parser.add_argument(
+        "--standard-rating",
+        action="store_true",
+        default=False,
+        help="if True, maps all ratings to standard 1, 2, 3, 4, 5 before training",
+    )
     # sparsity experiment settings
-    parser.add_argument('--ratio', type=float, default=1.0,
-                        help="For ml datasets, if ratio < 1, downsample training data to the\
-                        target ratio")
+    parser.add_argument(
+        "--ratio",
+        type=float,
+        default=1.0,
+        help="For ml datasets, if ratio < 1, downsample training data to the\
+                        target ratio",
+    )
     return parser
 
 
@@ -207,9 +335,19 @@ def main():
               set size..."
         )
         (
-            u_features, v_features, adj_train, train_labels, train_u_indices, train_v_indices,
-            val_labels, val_u_indices, val_v_indices, test_labels, test_u_indices, 
-            test_v_indices, class_values
+            u_features,
+            v_features,
+            adj_train,
+            train_labels,
+            train_u_indices,
+            train_v_indices,
+            val_labels,
+            val_u_indices,
+            val_v_indices,
+            test_labels,
+            test_u_indices,
+            test_v_indices,
+            class_values,
         ) = load_official_trainvaltest_split(
             args.data_name, args.testing, rating_map, post_rating_map, args.ratio
         )
@@ -240,18 +378,30 @@ def main():
     """
     if args.debug:  # use a small number of data to debug
         num_data = 1000
-        train_u_indices, train_v_indices = train_u_indices[:num_data], train_v_indices[:num_data]
-        val_u_indices, val_v_indices = val_u_indices[:num_data], val_v_indices[:num_data]
-        test_u_indices, test_v_indices = test_u_indices[:num_data], test_v_indices[:num_data]
+        train_u_indices, train_v_indices = (
+            train_u_indices[:num_data],
+            train_v_indices[:num_data],
+        )
+        val_u_indices, val_v_indices = (
+            val_u_indices[:num_data],
+            val_v_indices[:num_data],
+        )
+        test_u_indices, test_v_indices = (
+            test_u_indices[:num_data],
+            test_v_indices[:num_data],
+        )
 
     train_indices = (train_u_indices, train_v_indices)
     val_indices = (val_u_indices, val_v_indices)
     test_indices = (test_u_indices, test_v_indices)
-    print('#train: %d, #val: %d, #test: %d' % (
-        len(train_u_indices), 
-        len(val_u_indices), 
-        len(test_u_indices), 
-    ))
+    print(
+        "#train: %d, #val: %d, #test: %d"
+        % (
+            len(train_u_indices),
+            len(val_u_indices),
+            len(test_u_indices),
+        )
+    )
 
     """
           Extract enclosing subgraphs to build the train/test or train/val/test graph datasets. (Note that we must extract enclosing subgraphs for testmode and valmode separately, since the adj_train is different.)
@@ -268,51 +418,51 @@ def main():
             rmtree("data/{}{}/{}/val".format(*data_combo))
         if os.path.isdir("data/{}{}/{}/test".format(*data_combo)):
             rmtree("data/{}{}/{}/test".format(*data_combo))
-    
-    # create dataset, either dynamically extract enclosing subgraphs, 
+
+    # create dataset, either dynamically extract enclosing subgraphs,
     # or extract in preprocessing and save to disk.
-    dataset_class = 'MyDynamicDataset' if args.dynamic_val else 'MyDataset'
+    dataset_class = "MyDynamicDataset" if args.dynamic_val else "MyDataset"
     train_graphs = eval(dataset_class)(
-        'data/{}{}/{}/train'.format(*data_combo),
-        adj_train, 
-        train_indices, 
-        train_labels, 
-        args.hop, 
-        args.sample_ratio, 
+        "data/{}{}/{}/train".format(*data_combo),
+        adj_train,
+        train_indices,
+        train_labels,
+        args.hop,
+        args.sample_ratio,
         args.max_nodes_per_hop,
         u_features,
         v_features,
-        class_values, 
-        max_num=args.max_train_num
+        class_values,
+        max_num=args.max_train_num,
     )
-    dataset_class = 'MyDynamicDataset' if args.dynamic_test else 'MyDataset'
+    dataset_class = "MyDynamicDataset" if args.dynamic_test else "MyDataset"
     test_graphs = eval(dataset_class)(
-        'data/{}{}/{}/test'.format(*data_combo),
-        adj_train, 
-        test_indices, 
-        test_labels,  
-        args.hop, 
-        args.sample_ratio, 
+        "data/{}{}/{}/test".format(*data_combo),
+        adj_train,
+        test_indices,
+        test_labels,
+        args.hop,
+        args.sample_ratio,
         args.max_nodes_per_hop,
         u_features,
         v_features,
-        class_values,  
-        max_num=args.max_test_num
+        class_values,
+        max_num=args.max_test_num,
     )
     if not args.testing:
-        dataset_class = 'MyDynamicDataset' if args.dynamic_val else 'MyDataset'
+        dataset_class = "MyDynamicDataset" if args.dynamic_val else "MyDataset"
         val_graphs = eval(dataset_class)(
-            'data/{}{}/{}/val'.format(*data_combo),
-            adj_train, 
-            val_indices, 
+            "data/{}{}/{}/val".format(*data_combo),
+            adj_train,
+            val_indices,
             val_labels,
-            args.hop, 
-            args.sample_ratio, 
+            args.hop,
+            args.sample_ratio,
             args.max_nodes_per_hop,
             u_features,
             v_features,
-            class_values,  
-            max_num=args.max_val_num
+            class_values,
+            max_num=args.max_val_num,
         )
 
     # IGMC GNN model (default)
@@ -322,7 +472,9 @@ def main():
     else:
         num_relations = len(class_values)
         multiply_by = 1
-    n_features = 0  # NOTE: considering it is using CMF because the features become inputs
+    n_features = (
+        0  # NOTE: considering it is using CMF because the features become inputs
+    )
 
     model = IGCMF(
         train_graphs,
@@ -337,8 +489,6 @@ def main():
         multiply_by=multiply_by,
     )
 
-    
-
     if not args.no_train:
         # Train under multiple epochs
         train_multiple_epochs(
@@ -350,9 +500,9 @@ def main():
             args.lr,
             lr_decay_factor=args.lr_decay_factor,
             lr_decay_step_size=args.lr_decay_step_size,
-            weight_decay=0,
+            weight_decay=1e-5,
             ARR=args.ARR,
-            test_freq=args.test_freq, 
+            test_freq=args.test_freq,
             logger=logger,
             continue_from=args.continue_from,
             res_dir=args.res_dir,

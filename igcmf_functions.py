@@ -223,7 +223,7 @@ def subgraph_extraction(
 
 def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_label=1):
     # TODO: make it dynamic by handling multiple matrices later
-    y_genre = 1  # genre is always because it was selected to be 1 before.
+    y_genre = 0  # genre is always because it was selected to be 1 before.
 
     u_nodes, v_nodes, w_nodes = raw_nodes[0][0], raw_nodes[0][1], raw_nodes[1][1]
     u_dist, v_dist, w_dist = (
@@ -261,7 +261,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (len(matrices) * len(distances))
-    indexes = {"u": u, "v": v, "z":z, "w": w }
+    indexes = {"u": u, "v": v, "z": z, "w": w}
     y = [y1, y2]
     ratings = [r, sg]
 
@@ -362,19 +362,20 @@ def construct_pyg_graph(indexes, node_labels, max_node_label, y, ratings):
     # (u,v,r), (v,w,rs)
 
     u, v, w, z = indexes["u"], indexes["v"], indexes["w"], indexes["z"]
-    u, v, w, z  = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w), torch.LongTensor(z)
+    u, v, w, z = (
+        torch.LongTensor(u),
+        torch.LongTensor(v),
+        torch.LongTensor(w),
+        torch.LongTensor(z),
+    )
     r, sg = torch.LongTensor(ratings[0]), torch.LongTensor(ratings[1])
     # I am not sure how to include this
     edge_index = torch.stack([torch.cat([u, v, w, z]), torch.cat([v, u, z, w])], 0)
-    edge_type = torch.cat([r, r, sg, sg]) # why it works? 
-    y_final = torch.stack([torch.FloatTensor([y[0]]), torch.FloatTensor([y[1]])], 1)
+    edge_type = torch.cat([r, r, sg, sg])  # why it works?
+    y1 = torch.FloatTensor([y[0]])
+    y2 = torch.LongTensor([y[1]])
     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
-    data = Data(
-        x,
-        edge_index,
-        edge_type=edge_type,
-        y=y_final,
-    )
+    data = Data(x, edge_index, edge_type=edge_type, y1=y1, y2=y2)
     return data
 
 

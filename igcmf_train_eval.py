@@ -189,10 +189,9 @@ def train(
         optimizer.zero_grad()
         data = data.to(device)
         out1, out2 = model(data)
-        y = data.y
-        y1, y2 = y[:, 0], y[:, 1]
+        y1, y2 = data.y1, data.y2
         loss1 = F.mse_loss(out1, y1.view(-1))
-        loss2 = F.mse_loss(out2, y2.view(-1))
+        loss2 = F.nll_loss(out2, y2.view(-1))
         if show_progress:
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
@@ -226,11 +225,11 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
         with torch.no_grad():
             out1, out2 = model(data)
         if regression:
-            loss1 = F.mse_loss(out2, data.y[:, 0].view(-1), reduction="sum").item()
-            loss2 = F.mse_loss(out1, data.y[:, 1].view(-1), reduction="sum").item()
+            loss1 = F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
+            loss2 = F.nll_loss(out2, data.y2.view(-1), reduction="sum").item()
             loss += loss1 + loss2
         else:
-            loss += F.nll_loss(out, data.y.view(-1), reduction="sum").item()
+            loss += F.nll_loss(out2, data.y.view(-1), reduction="sum").item()
         torch.cuda.empty_cache()
     return loss / len(loader.dataset)
 
