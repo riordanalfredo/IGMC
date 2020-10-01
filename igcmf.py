@@ -500,7 +500,7 @@ def main():
             args.lr,
             lr_decay_factor=args.lr_decay_factor,
             lr_decay_step_size=args.lr_decay_step_size,
-            weight_decay=1e-5,
+            weight_decay=0,
             ARR=args.ARR,
             test_freq=args.test_freq,
             logger=logger,
