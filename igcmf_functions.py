@@ -241,7 +241,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
         subgraphs.append(subgraph)
 
     u, v, r = ssp.find(subgraphs[0])  # r is 1, 2... (rating labels + 1)
-    _, w, sg = ssp.find(subgraphs[1])  # sg (side genre) is 1 (genre exist)
+    z, w, sg = ssp.find(subgraphs[1])  # sg (side genre) is 1 (genre exist)
     r = r.astype(int)
     sg = sg.astype(int)
 
@@ -261,7 +261,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (len(matrices) * len(distances))
-    indexes = {"u": u, "v": v, "w": w}
+    indexes = {"u": u, "v": v, "z":z, "w": w }
     y = [y1, y2]
     ratings = [r, sg]
 
@@ -361,11 +361,12 @@ def collective_links2subgraphs(
 def construct_pyg_graph(indexes, node_labels, max_node_label, y, ratings):
     # (u,v,r), (v,w,rs)
 
-    u, v, w = indexes["u"], indexes["v"], indexes["w"]
-    u, v, w = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w)
+    u, v, w, z = indexes["u"], indexes["v"], indexes["w"], indexes["z"]
+    u, v, w, z  = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w), torch.LongTensor(z)
     r, sg = torch.LongTensor(ratings[0]), torch.LongTensor(ratings[1])
-    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([w, v, u])], 0)
-    edge_type = torch.cat([r, r, sg])
+    # I am not sure how to include this
+    edge_index = torch.stack([torch.cat([u, v]), torch.cat([u, w]), torch.cat([z,w]), torch.cat([w,z])], 0)
+    edge_type = torch.cat([r, r, sg, sg]) # why it works? 
     y_final = torch.stack([torch.FloatTensor([y[0]]), torch.FloatTensor([y[1]])], 1)
     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
     data = Data(
