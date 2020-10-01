@@ -20,34 +20,39 @@ matplotlib.use("Agg")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def train_multiple_epochs(train_dataset,
-                          test_dataset,
-                          model,
-                          epochs,
-                          batch_size,
-                          lr,
-                          lr_decay_factor,
-                          lr_decay_step_size,
-                          weight_decay,
-                          ARR=0, 
-                          test_freq=1, 
-                          logger=None, 
-                          continue_from=None, 
-                          res_dir=None):
+
+def train_multiple_epochs(
+    train_dataset,
+    test_dataset,
+    model,
+    epochs,
+    batch_size,
+    lr,
+    lr_decay_factor,
+    lr_decay_step_size,
+    weight_decay,
+    ARR=0,
+    test_freq=1,
+    logger=None,
+    continue_from=None,
+    res_dir=None,
+):
     rmses = []
 
-    if train_dataset.__class__.__name__ == 'MyDynamicDataset':
+    if train_dataset.__class__.__name__ == "MyDynamicDataset":
         num_workers = mp.cpu_count()
     else:
         num_workers = 2
-    train_loader = DataLoader(train_dataset, batch_size, shuffle=True, 
-                              num_workers=num_workers)
-    if test_dataset.__class__.__name__ == 'MyDynamicDataset':
+    train_loader = DataLoader(
+        train_dataset, batch_size, shuffle=True, num_workers=num_workers
+    )
+    if test_dataset.__class__.__name__ == "MyDynamicDataset":
         num_workers = mp.cpu_count()
     else:
         num_workers = 2
-    test_loader = DataLoader(test_dataset, batch_size, shuffle=False, 
-                             num_workers=num_workers)
+    test_loader = DataLoader(
+        test_dataset, batch_size, shuffle=False, num_workers=num_workers
+    )
 
     model.to(device).reset_parameters()
     optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -78,10 +83,20 @@ def train_multiple_epochs(train_dataset,
     else:
         pbar = range(start_epoch, epochs + start_epoch)
     for epoch in pbar:
-        train_loss = train(model, optimizer, train_loader, device, regression=True, ARR=ARR, 
-                           show_progress=batch_pbar, epoch=epoch)
+        train_loss = train(
+            model,
+            optimizer,
+            train_loader,
+            device,
+            regression=True,
+            ARR=ARR,
+            show_progress=batch_pbar,
+            epoch=epoch,
+        )
         if epoch % test_freq == 0:
-            rmses.append(eval_rmse(model, test_loader, device, show_progress=batch_pbar))
+            rmses.append(
+                eval_rmse(model, test_loader, device, show_progress=batch_pbar)
+            )
         else:
             rmses.append(np.nan)
         eval_info = {
@@ -91,10 +106,16 @@ def train_multiple_epochs(train_dataset,
         }
         if not batch_pbar:
             pbar.set_description(
-                'Epoch {}, train loss {:.6f}, test rmse {:.6f}'.format(*eval_info.values())
+                "Epoch {}, train loss {:.6f}, test rmse {:.6f}".format(
+                    *eval_info.values()
+                )
             )
         else:
-            print('Epoch {}, train loss {:.6f}, test rmse {:.6f}'.format(*eval_info.values()))
+            print(
+                "Epoch {}, train loss {:.6f}, test rmse {:.6f}".format(
+                    *eval_info.values()
+                )
+            )
 
         if epoch % lr_decay_step_size == 0:
             for param_group in optimizer.param_groups:
@@ -148,8 +169,16 @@ def num_graphs(data):
         return data.x.size(0)
 
 
-def train(model, optimizer, loader, device, regression=False, ARR=0, 
-          show_progress=False, epoch=None):
+def train(
+    model,
+    optimizer,
+    loader,
+    device,
+    regression=False,
+    ARR=0,
+    show_progress=False,
+    epoch=None,
+):
     model.train()
     total_loss = 0
     if show_progress:
@@ -165,14 +194,16 @@ def train(model, optimizer, loader, device, regression=False, ARR=0,
         else:
             loss = F.nll_loss(out, data.y.view(-1))
         if show_progress:
-            pbar.set_description('Epoch {}, batch loss: {}'.format(epoch, loss.item()))
+            pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
             for gconv in model.convs:
                 w = torch.matmul(gconv.att, gconv.basis.view(gconv.num_bases, -1)).view(
                     gconv.num_relations, gconv.in_channels, gconv.out_channels
                 )
-                reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2) # Eq. 6
-                loss += ARR * reg_loss # ARR is alpha in the paper (default: 0.001) Eq. 7
+                reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
+                loss += (
+                    ARR * reg_loss
+                )  # ARR is alpha in the paper (default: 0.001) Eq. 7
         # TODO: I need to add one more regularization for the side matrix
         loss.backward()
         total_loss += loss.item() * num_graphs(data)
