@@ -272,7 +272,6 @@ def random_nonzero(index, matrix):
     tpl = np.nonzero(matrix[index])
     return random.choice(tpl[1])  # because the first index will always be 0
 
-
 def collective_links2subgraphs(
     A,
     links,
@@ -370,8 +369,8 @@ def construct_pyg_graph(indexes, node_labels, max_node_label, y, ratings):
     )
     r, sg = torch.LongTensor(ratings[0]), torch.LongTensor(ratings[1])
     # I am not sure how to include this
-    edge_index = torch.stack([torch.cat([u, v, w, z]), torch.cat([v, u, z, w])], 0)
-    edge_type = torch.cat([r, r, sg, sg])  # why it works?
+    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([v, u, z])], 0)
+    edge_type = torch.cat([r, r, sg])  # why it works?
     y1 = torch.FloatTensor([y[0]])
     y2 = torch.LongTensor([y[1]])
     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))

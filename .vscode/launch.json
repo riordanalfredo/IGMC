@@ -11,12 +11,15 @@
     "args": [
       "--data-name",
       "ml_100k",
+      "--dynamic-train",
+      "--dynamic-test",
+      "--dynamic-val",
       "--debug",
       "--use-features",
       "--batch-size",
       "10",
       "--epochs",
-      "100",
+      "50",
       "--ensemble"
     ],
     "console": "integratedTerminal"
