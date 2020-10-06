@@ -132,16 +132,26 @@ class MyDynamicDataset(Dataset):
         nodes_distances_tpl.append((nodes, distances))
 
         # side matrix index (item features)
-        k = random_nonzero(j, self.v_features)  # TODO: could this be an issue?
-        nodes, distances = subgraph_extraction(
-            (j, k),
-            self.v_features,
-            self.h,
-            self.sample_ratio,
-            self.max_nodes_per_hop,
-            g_label,
-        )
-        nodes_distances_tpl.append((nodes, distances))
+        # k = random_nonzero(j, self.v_features)  # TODO: could this be an issue?
+        # nodes, distances = subgraph_extraction(
+        #     (j, k),
+        #     self.v_features,
+        #     self.h,
+        #     self.sample_ratio,
+        #     self.max_nodes_per_hop,
+        #     g_label,
+        # )
+        # nodes_distances_tpl.append((nodes, distances))
+
+        item_nodes = nodes[1]
+        item_dist = distances[1]
+        genre_nodes = np.nonzero(self.v_features[j])[1].flatten()
+
+        genre_dist = [0]
+        num_g_nodes = len(genre_nodes) - 1
+        genre_dist += [1 for _ in range(num_g_nodes)]
+        nodes_distances_tpl.append(([item_nodes, genre_nodes], [item_dist, genre_dist]))
+
         nodes = [nd[0] for nd in nodes_distances_tpl]
         distances = [nd[1] for nd in nodes_distances_tpl]
         matrices = [self.A, self.v_features]  # main, side
@@ -246,7 +256,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
     sg = sg.astype(int)
 
     v += len(u_nodes)  # starting point
-    w += len(u_nodes) + len(v_nodes)  # starting point
+    w += len(u_nodes) + len(v_nodes)  # + len(w_nodes)  # starting point
 
     y1 = class_values[g_label]
     y2 = y_genre
@@ -271,6 +281,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
 def random_nonzero(index, matrix):
     tpl = np.nonzero(matrix[index])
     return random.choice(tpl[1])  # because the first index will always be 0
+
 
 def collective_links2subgraphs(
     A,
@@ -368,8 +379,7 @@ def construct_pyg_graph(indexes, node_labels, max_node_label, y, ratings):
         torch.LongTensor(z),
     )
     r, sg = torch.LongTensor(ratings[0]), torch.LongTensor(ratings[1])
-    # I am not sure how to include this
-    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([v, u, z])], 0)
+    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([v, u, w])], 0)
     edge_type = torch.cat([r, r, sg])  # why it works?
     y1 = torch.FloatTensor([y[0]])
     y2 = torch.LongTensor([y[1]])
