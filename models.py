@@ -362,8 +362,5 @@ class IGCMF(GNN):
 
         x1 = x1[:, 0] * self.multiply_by
         x2 = F.log_softmax(x2, dim=-1)
-
-        if self.regression:
-            return x1, x2
-        else:
-            return F.log_softmax(x2, dim=-1)
+        return x1, x2
+  

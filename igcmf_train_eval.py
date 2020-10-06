@@ -194,17 +194,17 @@ def train(
         loss2 = F.nll_loss(out2, y2.view(-1))
         if show_progress:
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
+        loss = loss1 + loss2
         if ARR != 0:
             for gconv in model.convs:
                 w = torch.matmul(gconv.att, gconv.basis.view(gconv.num_bases, -1)).view(
                     gconv.num_relations, gconv.in_channels, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
-                loss1 += (
+                loss += (
                     ARR * reg_loss
                 )  # ARR is alpha in the paper (default: 0.001) Eq. 7
-        # TODO: Do I need to add one more regularization for the side matrix?
-        loss = loss1 + loss2
+
         loss.backward()
         total_loss += loss.item() * num_graphs(data)
         optimizer.step()
