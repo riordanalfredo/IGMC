@@ -19,10 +19,22 @@ cur_dir = os.path.dirname(os.path.realpath(__file__))
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-
 class MyDataset(InMemoryDataset):
-    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
-                 u_features, v_features, class_values, max_num=None, parallel=True):
+    def __init__(
+        self,
+        root,
+        A,
+        links,
+        labels,
+        h,
+        sample_ratio,
+        max_nodes_per_hop,
+        u_features,
+        v_features,
+        class_values,
+        max_num=None,
+        parallel=True,
+    ):
         self.A = A
         self.links = links
         self.labels = labels
@@ -46,25 +58,46 @@ class MyDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        name = 'data.pt'
+        name = "data.pt"
         if self.max_num is not None:
-            name = 'data_{}.pt'.format(self.max_num)
+            name = "data_{}.pt".format(self.max_num)
         return [name]
 
     def process(self):
-        
+
         # Extract enclosing subgraphs and save to disk
-        data_list = collective_links2subgraphs(self.A, self.links, self.labels, self.h, 
-                                    self.sample_ratio, self.max_nodes_per_hop, 
-                                    self.u_features, self.v_features, 
-                                    self.class_values, self.parallel)
+        data_list = collective_links2subgraphs(
+            self.A,
+            self.links,
+            self.labels,
+            self.h,
+            self.sample_ratio,
+            self.max_nodes_per_hop,
+            self.u_features,
+            self.v_features,
+            self.class_values,
+            self.parallel,
+        )
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
         del data_list
 
+
 class MyDynamicDataset(Dataset):
-    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
-                 u_features, v_features, class_values, max_num=None):
+    def __init__(
+        self,
+        root,
+        A,
+        links,
+        labels,
+        h,
+        sample_ratio,
+        max_nodes_per_hop,
+        u_features,
+        v_features,
+        class_values,
+        max_num=None,
+    ):
         super(MyDynamicDataset, self).__init__(root)
         self.A = A
         self.links = links
@@ -101,7 +134,12 @@ class MyDynamicDataset(Dataset):
         # side matrix index (item features)
         k = random_nonzero(j, self.v_features)
         nodes, distances = subgraph_extraction(
-            (j, k), self.v_features, self.h, self.sample_ratio, self.max_nodes_per_hop, g_label
+            (j, k),
+            self.v_features,
+            self.h,
+            self.sample_ratio,
+            self.max_nodes_per_hop,
+            g_label,
         )
         nodes_distances_tpl.append((nodes, distances))
         nodes = [nd[0] for nd in nodes_distances_tpl]
@@ -109,41 +147,22 @@ class MyDynamicDataset(Dataset):
         matrices = [self.A, self.v_features]  # main, side
 
         # node labeling
-        tmp = subgraph_labeling(nodes, distances, matrices, class_values=self.class_values, h= self.h, g_label=g_label)
+        tmp = subgraph_labeling(
+            nodes,
+            distances,
+            matrices,
+            class_values=self.class_values,
+            h=self.h,
+            g_label=g_label,
+        )
 
         return construct_pyg_graph(*tmp)
-
-"""
-    Method to convert networkx graph to PyGGraph format using pytorch.
-"""
-
-
-# def nx_to_PyGGraph(
-#     g, graph_label, node_labels, node_features, max_node_label, class_values
-# ):
-#     y = torch.FloatTensor([class_values[graph_label]])
-#     if len(g.edges()) == 0:
-#         i, j = [], []
-#     else:
-#         i, j = zip(*g.edges())
-#     edge_index = torch.LongTensor([i + j, j + i])
-#     edge_type_dict = nx.get_edge_attributes(g, "type")
-#     edge_type = torch.LongTensor([edge_type_dict[(ii, jj)] for ii, jj in zip(i, j)])
-#     edge_type = torch.cat([edge_type, edge_type], 0)
-#     edge_attr = torch.FloatTensor(class_values[edge_type]).unsqueeze(
-#         1
-#     )  # continuous ratings, num_edges * 1
-#     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
-
-#     data = Data(x, edge_index, edge_attr=edge_attr, y=y)
-#     data.edge_type = edge_type
-
-#     return data
 
 
 """
     Method to extract the subgraph from collective matrices
 """
+
 
 def subgraph_extraction(
     inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None, class_values=None
@@ -202,11 +221,11 @@ def subgraph_extraction(
     return nodes, distances
 
 
-def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1,g_label=1):
+def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_label=1):
     # TODO: make it dynamic by handling multiple matrices later
     main_matrix = matrices[0]
     side_matrix = matrices[1]
-    y_genre = 1 # genre is always because it was selected to be 1 before.
+    y_genre = 0  # genre is always because it was selected to be 1 before.
     u_nodes, v_nodes, w_nodes = raw_nodes[0][0], raw_nodes[0][1], raw_nodes[1][1]
     u_dist, v_dist, w_dist = (
         raw_distances[0][0],
@@ -215,7 +234,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1,g_la
     )
     nodes = [u_nodes, v_nodes, w_nodes]
     distances = [u_dist, v_dist, w_dist]
-    
+
     subgraphs = []
     for i in range(1, len(matrices) + 1):
         subgraph = matrices[i - 1][nodes[i - 1], :][:, nodes[i]]
@@ -223,17 +242,17 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1,g_la
         subgraphs.append(subgraph)
 
     u, v, r = ssp.find(subgraphs[0])  # r is 1, 2... (rating labels + 1)
-    x, w, rs = ssp.find(subgraphs[1])  # y is 1 (genre exist)
+    x, w, sg = ssp.find(subgraphs[1])  # y is 1 (genre exist)
     r = r.astype(int)
-    rs = rs.astype(int)
+    sg = sg.astype(int)
 
-    v += len(u_nodes) # starting point
-    w += len(u_nodes) + len(v_nodes) # starting point
+    v += len(u_nodes)  # starting point
+    w += len(u_nodes) + len(v_nodes)  # starting point
 
     y = class_values[g_label]
 
-    r =  r - 1 # transform r back to rating label
-    rs = rs # transform rating side back to original label
+    r = r - 1  # transform r back to rating label
+    sg = sg  # transform rating side back to original label
 
     # Node-labeling process
     node_labels = []
@@ -242,9 +261,24 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1,g_la
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (len(matrices) * len(distances))
-    triplet = {"u":u, "v":v, "r":r}
+    indices = {"u": u, "v": v, "w": w}
+    scores = {"r": r, "sg": sg}
 
-    return triplet, node_labels, max_node_label, y 
+    return indices, scores, node_labels, max_node_label, y
+
+
+def construct_pyg_graph(indices, scores, node_labels, max_node_label, y):
+    # (u,v,r), (v,w,rs)
+    u, v, w = indices["u"], indices["v"], indices["w"]
+    r, sg = scores["r"], scores["sg"]
+    u, v, w = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w)
+    r, sg = torch.LongTensor(r), torch.LongTensor(sg)
+    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([v, u, w])], 0)
+    edge_type = torch.cat([r, r, sg])
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
+    y = torch.FloatTensor([y])
+    data = Data(x, edge_index, edge_type=edge_type, y=y)
+    return data
 
 
 def random_nonzero(index, matrix):
@@ -263,9 +297,9 @@ def collective_links2subgraphs(
     v_features=None,
     class_values=None,
     parallel=True,
-):  
+):
     # extract enclosing subgraphs
-    print('Enclosing subgraph extraction begins...')
+    print("Enclosing subgraph extraction begins...")
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (2 * 3)
@@ -275,8 +309,15 @@ def collective_links2subgraphs(
         with tqdm(total=len(links[0])) as pbar:
             for i, j, g_label in zip(links[0], links[1], labels):
                 tmp = subgraph_extraction_labeling(
-                    (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features, 
-                    v_features, class_values, g_label
+                    (i, j),
+                    A,
+                    h,
+                    sample_ratio,
+                    max_nodes_per_hop,
+                    u_features,
+                    v_features,
+                    class_values,
+                    g_label,
                 )
                 data = construct_pyg_graph(*tmp)
                 g_list.append(data)
@@ -288,8 +329,15 @@ def collective_links2subgraphs(
             subgraph_extraction_labeling,
             [
                 (
-                    (i, j), A,h,sample_ratio,max_nodes_per_hop,
-                    u_features, v_features, class_values, g_label
+                    (i, j),
+                    A,
+                    h,
+                    sample_ratio,
+                    max_nodes_per_hop,
+                    u_features,
+                    v_features,
+                    class_values,
+                    g_label,
                 )
                 for i, j, g_label in zip(links[0], links[1], labels)
             ],
@@ -298,7 +346,8 @@ def collective_links2subgraphs(
         pbar = tqdm(total=remaining)
         while True:
             pbar.update(remaining - results._number_left)
-            if results.ready(): break
+            if results.ready():
+                break
             remaining = results._number_left
             time.sleep(1)
         results = results.get()
@@ -314,22 +363,16 @@ def collective_links2subgraphs(
             pbar.update(1)
         pbar.close()
         end2 = time.time()
-        print("Time eplased for transforming to pytorch_geometric graphs: {}s".format(end2 - end))
+        print(
+            "Time eplased for transforming to pytorch_geometric graphs: {}s".format(
+                end2 - end
+            )
+        )
     return g_list
 
-def construct_pyg_graph(triplet, node_labels, max_node_label, y):
-    # (u,v,r), (v,w,rs)
-    u, v, r = triplet["u"], triplet["v"], triplet["r"]
-    u, v = torch.LongTensor(u), torch.LongTensor(v)
-    r = torch.LongTensor(r)  
-    edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
-    edge_type = torch.cat([r, r])
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label+1))
-    y = torch.FloatTensor([y])
-    data = Data(x, edge_index, edge_type=edge_type, y=y)
-    return data
 
-def subgraph_extraction_labeling( ind,
+def subgraph_extraction_labeling(
+    ind,
     A,
     h=1,
     sample_ratio=1.0,
