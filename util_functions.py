@@ -17,14 +17,28 @@ import scipy.sparse as ssp
 import torch
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 import warnings
-warnings.simplefilter('ignore', ssp.SparseEfficiencyWarning)
+
+warnings.simplefilter("ignore", ssp.SparseEfficiencyWarning)
 cur_dir = os.path.dirname(os.path.realpath(__file__))
-torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy("file_system")
 
 
 class MyDataset(InMemoryDataset):
-    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
-                 u_features, v_features, class_values, max_num=None, parallel=True):
+    def __init__(
+        self,
+        root,
+        A,
+        links,
+        labels,
+        h,
+        sample_ratio,
+        max_nodes_per_hop,
+        u_features,
+        v_features,
+        class_values,
+        max_num=None,
+        parallel=True,
+    ):
         self.A = A
         self.links = links
         self.labels = labels
@@ -48,17 +62,25 @@ class MyDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        name = 'data.pt'
+        name = "data.pt"
         if self.max_num is not None:
-            name = 'data_{}.pt'.format(self.max_num)
+            name = "data_{}.pt".format(self.max_num)
         return [name]
 
     def process(self):
         # Extract enclosing subgraphs and save to disk
-        data_list = links2subgraphs(self.A, self.links, self.labels, self.h, 
-                                    self.sample_ratio, self.max_nodes_per_hop, 
-                                    self.u_features, self.v_features, 
-                                    self.class_values, self.parallel)
+        data_list = links2subgraphs(
+            self.A,
+            self.links,
+            self.labels,
+            self.h,
+            self.sample_ratio,
+            self.max_nodes_per_hop,
+            self.u_features,
+            self.v_features,
+            self.class_values,
+            self.parallel,
+        )
 
         data, slices = self.collate(data_list)
         torch.save((data, slices), self.processed_paths[0])
@@ -66,8 +88,20 @@ class MyDataset(InMemoryDataset):
 
 
 class MyDynamicDataset(Dataset):
-    def __init__(self, root, A, links, labels, h, sample_ratio, max_nodes_per_hop, 
-                 u_features, v_features, class_values, max_num=None):
+    def __init__(
+        self,
+        root,
+        A,
+        links,
+        labels,
+        h,
+        sample_ratio,
+        max_nodes_per_hop,
+        u_features,
+        v_features,
+        class_values,
+        max_num=None,
+    ):
         super(MyDynamicDataset, self).__init__(root)
         self.A = A
         self.links = links
@@ -93,31 +127,47 @@ class MyDynamicDataset(Dataset):
         i, j = self.links[0][idx], self.links[1][idx]
         g_label = self.labels[idx]
         tmp = subgraph_extraction_labeling(
-            (i, j), self.A, self.h, self.sample_ratio, self.max_nodes_per_hop, 
-            self.u_features, self.v_features, self.class_values, g_label
+            (i, j),
+            self.A,
+            self.h,
+            self.sample_ratio,
+            self.max_nodes_per_hop,
+            self.u_features,
+            self.v_features,
+            self.class_values,
+            g_label,
         )
         return construct_pyg_graph(*tmp)
 
 
-def links2subgraphs(A,
-                    links, 
-                    labels, 
-                    h=1, 
-                    sample_ratio=1.0, 
-                    max_nodes_per_hop=None, 
-                    u_features=None, 
-                    v_features=None, 
-                    class_values=None, 
-                    parallel=True):
+def links2subgraphs(
+    A,
+    links,
+    labels,
+    h=1,
+    sample_ratio=1.0,
+    max_nodes_per_hop=None,
+    u_features=None,
+    v_features=None,
+    class_values=None,
+    parallel=True,
+):
     # extract enclosing subgraphs
-    print('Enclosing subgraph extraction begins...')
+    print("Enclosing subgraph extraction begins...")
     g_list = []
     if not parallel:
         with tqdm(total=len(links[0])) as pbar:
             for i, j, g_label in zip(links[0], links[1], labels):
                 tmp = subgraph_extraction_labeling(
-                    (i, j), A, h, sample_ratio, max_nodes_per_hop, u_features, 
-                    v_features, class_values, g_label
+                    (i, j),
+                    A,
+                    h,
+                    sample_ratio,
+                    max_nodes_per_hop,
+                    u_features,
+                    v_features,
+                    class_values,
+                    g_label,
                 )
                 data = construct_pyg_graph(*tmp)
                 g_list.append(data)
@@ -126,25 +176,35 @@ def links2subgraphs(A,
         start = time.time()
         pool = mp.Pool(mp.cpu_count())
         results = pool.starmap_async(
-            subgraph_extraction_labeling, 
+            subgraph_extraction_labeling,
             [
-                ((i, j), A, h, sample_ratio, max_nodes_per_hop, u_features, 
-                v_features, class_values, g_label) 
+                (
+                    (i, j),
+                    A,
+                    h,
+                    sample_ratio,
+                    max_nodes_per_hop,
+                    u_features,
+                    v_features,
+                    class_values,
+                    g_label,
+                )
                 for i, j, g_label in zip(links[0], links[1], labels)
-            ]
+            ],
         )
         remaining = results._number_left
         pbar = tqdm(total=remaining)
         while True:
             pbar.update(remaining - results._number_left)
-            if results.ready(): break
+            if results.ready():
+                break
             remaining = results._number_left
             time.sleep(1)
         results = results.get()
         pool.close()
         pbar.close()
         end = time.time()
-        print("Time eplased for subgraph extraction: {}s".format(end-start))
+        print("Time eplased for subgraph extraction: {}s".format(end - start))
         print("Transforming to pytorch_geometric graphs...")
         g_list = []
         pbar = tqdm(total=len(results))
@@ -154,30 +214,40 @@ def links2subgraphs(A,
             pbar.update(1)
         pbar.close()
         end2 = time.time()
-        print("Time eplased for transforming to pytorch_geometric graphs: {}s".format(end2-end))
+        print(
+            "Time eplased for transforming to pytorch_geometric graphs: {}s".format(
+                end2 - end
+            )
+        )
     return g_list
 
 
-
-def subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None, 
-                                 u_features=None, v_features=None, class_values=None, 
-                                 y=1):
+def subgraph_extraction_labeling(
+    ind,
+    A,
+    h=1,
+    sample_ratio=1.0,
+    max_nodes_per_hop=None,
+    u_features=None,
+    v_features=None,
+    class_values=None,
+    y=1,
+):
     # extract the h-hop enclosing subgraph around link 'ind'
     dist = 0
     u_nodes, v_nodes = [ind[0]], [ind[1]]
     u_dist, v_dist = [0], [0]
     u_visited, v_visited = set([ind[0]]), set([ind[1]])
     u_fringe, v_fringe = set([ind[0]]), set([ind[1]])
-    for dist in range(1, h+1):
-        v_fringe, u_fringe = neighbors(
-            u_fringe, A, True), neighbors(v_fringe, A, False)
+    for dist in range(1, h + 1):
+        v_fringe, u_fringe = neighbors(u_fringe, A, True), neighbors(v_fringe, A, False)
         u_fringe = u_fringe - u_visited
         v_fringe = v_fringe - v_visited
         u_visited = u_visited.union(u_fringe)
         v_visited = v_visited.union(v_fringe)
         if sample_ratio < 1.0:
-            u_fringe = random.sample(u_fringe, int(sample_ratio*len(u_fringe)))
-            v_fringe = random.sample(v_fringe, int(sample_ratio*len(v_fringe)))
+            u_fringe = random.sample(u_fringe, int(sample_ratio * len(u_fringe)))
+            v_fringe = random.sample(v_fringe, int(sample_ratio * len(v_fringe)))
         if max_nodes_per_hop is not None:
             if max_nodes_per_hop < len(u_fringe):
                 u_fringe = random.sample(u_fringe, max_nodes_per_hop)
@@ -198,8 +268,8 @@ def subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_ho
     v += len(u_nodes)
     r = r - 1  # transform r back to rating label
     num_nodes = len(u_nodes) + len(v_nodes)
-    node_labels = [x*2 for x in u_dist] + [x*2+1 for x in v_dist]
-    max_node_label = 2*h + 1
+    node_labels = [x * 2 for x in u_dist] + [x * 2 + 1 for x in v_dist]
+    max_node_label = 2 * h + 1
     y = class_values[y]
 
     # get node features
@@ -212,35 +282,33 @@ def subgraph_extraction_labeling(ind, A, h=1, sample_ratio=1.0, max_nodes_per_ho
         # directly use padded node features
         if u_features is not None and v_features is not None:
             u_extended = np.concatenate(
-                [u_features, np.zeros(
-                    [u_features.shape[0], v_features.shape[1]])], 1
+                [u_features, np.zeros([u_features.shape[0], v_features.shape[1]])], 1
             )
             v_extended = np.concatenate(
-                [np.zeros([v_features.shape[0], u_features.shape[1]]),
-                 v_features], 1
+                [np.zeros([v_features.shape[0], u_features.shape[1]]), v_features], 1
             )
             node_features = np.concatenate([u_extended, v_extended], 0)
     if False:
         # use identity features (one-hot encodings of node idxes)
         u_ids = one_hot(u_nodes, A.shape[0] + A.shape[1])
-        v_ids = one_hot([x+A.shape[0] for x in v_nodes], A.shape[0] + A.shape[1])
+        v_ids = one_hot([x + A.shape[0] for x in v_nodes], A.shape[0] + A.shape[1])
         node_ids = np.concatenate([u_ids, v_ids], 0)
-        #node_features = np.concatenate([node_features, node_ids], 1)
+        # node_features = np.concatenate([node_features, node_ids], 1)
         node_features = node_ids
     if True:
         # only output node features for the target user and item
         if u_features is not None and v_features is not None:
             node_features = [u_features[0], v_features[0]]
-    
+
     return u, v, r, node_labels, max_node_label, y, node_features
 
 
 def construct_pyg_graph(u, v, r, node_labels, max_node_label, y, node_features):
     u, v = torch.LongTensor(u), torch.LongTensor(v)
-    r = torch.LongTensor(r)  
+    r = torch.LongTensor(r)
     edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
     edge_type = torch.cat([r, r])
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label+1))
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
     y = torch.FloatTensor([y])
     data = Data(x, edge_index, edge_type=edge_type, y=y)
 
@@ -254,7 +322,7 @@ def construct_pyg_graph(u, v, r, node_labels, max_node_label, y, node_features):
             data.x = torch.cat([data.x, x2], 1)
     return data
 
-   
+
 def neighbors(fringe, A, row=True):
     # find all 1-hop neighbors of nodes in fringe from A
     res = set()
@@ -281,9 +349,8 @@ def PyGGraph_to_nx(data):
     g.add_nodes_from(range(len(data.x)))  # in case some nodes are isolated
     # transform r back to rating label
     edge_types = {(u, v): data.edge_type[i].item() for i, (u, v) in enumerate(edges)}
-    nx.set_edge_attributes(g, name='type', values=edge_types)
+    nx.set_edge_attributes(g, name="type", values=edge_types)
     node_types = dict(zip(range(data.num_nodes), torch.argmax(data.x, 1).tolist()))
-    nx.set_node_attributes(g, name='type', values=node_types)
-    g.graph['rating'] = data.y.item()
+    nx.set_node_attributes(g, name="type", values=node_types)
+    g.graph["rating"] = data.y.item()
     return g
-
