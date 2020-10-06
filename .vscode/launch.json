@@ -14,7 +14,7 @@
       "--debug",
       "--use-features",
       "--batch-size",
-      "10",
+      "20",
       "--dynamic-train",
       "--dynamic-test",
       "--dynamic-val",

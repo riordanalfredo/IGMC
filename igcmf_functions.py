@@ -242,17 +242,20 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
         subgraphs.append(subgraph)
 
     u, v, r = ssp.find(subgraphs[0])  # r is 1, 2... (rating labels + 1)
-    x, w, sg = ssp.find(subgraphs[1])  # y is 1 (genre exist)
+    item_side_ids, genre_ids, genre_values = ssp.find(
+        subgraphs[1]
+    )  # y is 1 (genre exist)
     r = r.astype(int)
-    sg = sg.astype(int)
+    genre_values = genre_values.astype(int)
 
     v += len(u_nodes)  # starting point
-    w += len(u_nodes) + len(v_nodes)  # starting point
+    item_side_ids += len(u_nodes)
+    genre_ids += len(u_nodes) + len(v_nodes)  # starting point
 
     y = class_values[g_label]
 
     r = r - 1  # transform r back to rating label
-    sg = sg  # transform rating side back to original label
+    genre_values = genre_values  # transform rating side back to original label
 
     # Node-labeling process
     node_labels = []
@@ -261,20 +264,34 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
 
     # Set max node label (2 matrix, 3 relations, 1 hop)
     max_node_label = h * (len(matrices) * len(distances))
-    indices = {"u": u, "v": v, "w": w}
-    scores = {"r": r, "sg": sg}
+    indices = {
+        "user_ids": u,
+        "item_ids": v,
+        "genre_ids": genre_ids,
+        "item_side_ids": item_side_ids,
+    }
+    scores = {"r": r, "g": genre_values}
 
     return indices, scores, node_labels, max_node_label, y
 
 
 def construct_pyg_graph(indices, scores, node_labels, max_node_label, y):
-    # (u,v,r), (v,w,rs)
-    u, v, w = indices["u"], indices["v"], indices["w"]
-    r, sg = scores["r"], scores["sg"]
-    u, v, w = torch.LongTensor(u), torch.LongTensor(v), torch.LongTensor(w)
-    r, sg = torch.LongTensor(r), torch.LongTensor(sg)
-    edge_index = torch.stack([torch.cat([u, v, w]), torch.cat([v, u, w])], 0)
-    edge_type = torch.cat([r, r, sg])
+    u, v, w, z = (
+        indices["user_ids"],
+        indices["item_ids"],
+        indices["genre_ids"],
+        indices["item_side_ids"],
+    )
+    r, g = scores["r"], scores["g"]
+    u, v, w, z = (
+        torch.LongTensor(u),
+        torch.LongTensor(v),
+        torch.LongTensor(w),
+        torch.LongTensor(z),
+    )
+    r, g = torch.LongTensor(r), torch.LongTensor(g)
+    edge_index = torch.stack([torch.cat([u, v, z, w]), torch.cat([v, u, w, z])], 0)
+    edge_type = torch.cat([r, r, g, g])
     x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
     y = torch.FloatTensor([y])
     data = Data(x, edge_index, edge_type=edge_type, y=y)
