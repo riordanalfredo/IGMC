@@ -15,8 +15,11 @@
       "--use-features",
       "--batch-size",
       "10",
+      "--dynamic-train",
+      "--dynamic-test",
+      "--dynamic-val",
       "--epochs",
-      "100",
+      "50",
       "--ensemble"
     ],
     "console": "integratedTerminal"
