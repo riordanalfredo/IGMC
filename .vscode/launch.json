@@ -13,10 +13,13 @@
       "ml_100k",
       "--debug",
       "--use-features",
+      "--dynamic-train",
+      "--dynamic-test",
+      "--dynamic-val",
       "--batch-size",
       "10",
       "--epochs",
-      "100",
+      "50",
       "--ensemble"
     ],
     "console": "integratedTerminal"
