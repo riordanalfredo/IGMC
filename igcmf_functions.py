@@ -255,7 +255,7 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
     y = class_values[g_label]
 
     r = r - 1  # transform r back to rating label
-    genre_values = genre_values  # transform rating side back to original label
+    genre_values = genre_values - 1 + len(class_values)  # transform rating side back to original label
 
     # Node-labeling process
     node_labels = []
