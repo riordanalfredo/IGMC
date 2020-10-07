@@ -470,7 +470,7 @@ def main():
         num_relations = args.num_relations
         multiply_by = args.multiply_by
     else:
-        num_relations = len(class_values)
+        num_relations = len(class_values) + 1
         multiply_by = 1
     n_features = (
         0  # NOTE: considering it is using CMF because the features become inputs
