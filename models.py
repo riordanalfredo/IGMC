@@ -361,7 +361,7 @@ class IGCMF(GNN):
         # x = torch.stack([x1, x2], 0)
 
         x1 = x1[:, 0] * self.multiply_by
-        x2 = F.log_softmax(x2, dim=-1)
+        x2 = x2[:, 0] * self.multiply_by
 
         if self.regression:
             return x1, x2

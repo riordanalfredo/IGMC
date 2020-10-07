@@ -180,6 +180,7 @@ def train(
     epoch=None,
 ):
     model.train()
+    beta = 0.0001
     total_loss = 0
     if show_progress:
         pbar = tqdm(loader)
@@ -191,7 +192,7 @@ def train(
         out1, out2 = model(data)
         y1, y2 = data.y1, data.y2
         loss1 = F.mse_loss(out1, y1.view(-1))
-        loss2 = F.nll_loss(out2, y2.view(-1))
+        loss2 = F.mse_loss(out2, y2.view(-1))
         if show_progress:
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
@@ -200,10 +201,9 @@ def train(
                     gconv.num_relations, gconv.in_channels, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
-                loss1 += (
-                    ARR * reg_loss
-                )  # ARR is alpha in the paper (default: 0.001) Eq. 7
-                loss2 += reg_loss
+                loss1 += ARR * reg_loss
+                # ARR is alpha in the paper (default: 0.001) Eq. 7
+                loss2 += beta * reg_loss
 
         loss = loss1 + loss2
         loss.backward()
@@ -227,7 +227,7 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
             out1, out2 = model(data)
         if regression:
             loss1 = F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
-            loss2 = F.nll_loss(out2, data.y2.view(-1), reduction="sum").item()
+            loss2 = F.mse_loss(out2, data.y2.view(-1), reduction="sum").item()
             loss += loss1 + loss2
         else:
             loss += F.nll_loss(out2, data.y.view(-1), reduction="sum").item()
