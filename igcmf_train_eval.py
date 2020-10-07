@@ -192,7 +192,6 @@ def train(
         y1, y2 = data.y1, data.y2
         loss1 = F.mse_loss(out1, y1.view(-1))
         loss2 = F.nll_loss(out2, y2.view(-1))
-        loss = loss1 + loss2
         if show_progress:
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
@@ -201,11 +200,12 @@ def train(
                     gconv.num_relations, gconv.in_channels, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
-                loss += (
+                loss1 += (
                     ARR * reg_loss
                 )  # ARR is alpha in the paper (default: 0.001) Eq. 7
+                loss2 += reg_loss
 
-        # loss = loss1 + loss2
+        loss = loss1 + loss2
         loss.backward()
         total_loss += loss.item() * num_graphs(data)
         optimizer.step()
