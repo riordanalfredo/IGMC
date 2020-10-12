@@ -455,7 +455,7 @@ def main():
         train_graphs,
         latent_dim=[32, 32, 32, 32],  # increase latent dimension to 128
         num_relations=num_relations,
-        num_bases=4,
+        num_bases=8,
         regression=True,
         adj_dropout=args.adj_dropout,
         force_undirected=args.force_undirected,
