@@ -255,7 +255,9 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
     y = class_values[g_label]
 
     r = r - 1  # transform r back to rating label
-    genre_values = genre_values - 1 + len(class_values)  # transform rating side back to original label
+    genre_values = (
+        genre_values - 1 + len(class_values)
+    )  # NOTE: 6, because we want it to be separated from [1,2,3,4,5] rating
 
     # Node-labeling process
     node_labels = []
@@ -292,7 +294,7 @@ def construct_pyg_graph(indices, scores, node_labels, max_node_label, y):
     r, g = torch.LongTensor(r), torch.LongTensor(g)
     edge_index = torch.stack([torch.cat([u, v, z, w]), torch.cat([v, u, w, z])], 0)
     edge_type = torch.cat([r, r, g, g])
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label))
     y = torch.FloatTensor([y])
     data = Data(x, edge_index, edge_type=edge_type, y=y)
     return data
