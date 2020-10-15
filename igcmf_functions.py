@@ -11,7 +11,9 @@ import networkx as nx
 import numpy as np
 import random
 import torch
-from torch_geometric.data import Data, Dataset, InMemoryDataset
+
+# from torch.utils.data import Dataset
+from torch_geometric.data import Data, InMemoryDataset, Dataset
 import warnings
 
 warnings.simplefilter("ignore", ssp.SparseEfficiencyWarning)
@@ -83,6 +85,23 @@ class MyDataset(InMemoryDataset):
         del data_list
 
 
+class PairData(Data):
+    def __init__(self, edge_index_s, x_s, edge_index_t, x_t):
+        super(PairData, self).__init__()
+        self.edge_index_s = edge_index_s
+        self.x_s = x_s
+        self.edge_index_t = edge_index_t
+        self.x_t = x_t
+
+    def __inc__(self, key, value):
+        if key == "edge_index_s":
+            return self.x_s.size(0)
+        if key == "edge_index_t":
+            return self.x_t.size(0)
+        else:
+            return super(PairData, self).__inc__(key, value)
+
+
 class MyDynamicDataset(Dataset):
     def __init__(
         self,
@@ -98,7 +117,7 @@ class MyDynamicDataset(Dataset):
         class_values,
         max_num=None,
     ):
-        super(MyDynamicDataset, self).__init__(root)
+        # super(MyDynamicDataset, self).__init__(root)
         self.A = A
         self.links = links
         self.labels = labels
@@ -119,17 +138,24 @@ class MyDynamicDataset(Dataset):
     def __len__(self):
         return len(self.links[0])
 
-    def get(self, idx):
-        # node_features = [self.u_features[0], self.v_features[0]]
-        nodes_distances_tpl = []
-        i, j = self.links[0][idx], self.links[1][idx]
-        g_label = self.labels[idx]
+    # def __getitem__(self, idx):
+    #     return self.datasetA[idx], self.datasetB[idx]
 
-        # i and j indices
+    def __getitem__(self, idx):
+        # rating matrix (user-item)
+        i, j = self.links[0][idx], self.links[1][idx]
+        score = self.labels[idx]
         nodes, distances = subgraph_extraction(
             (i, j), self.A, self.h, self.sample_ratio, self.max_nodes_per_hop
-        )
-        nodes_distances_tpl.append((nodes, distances))
+        )  # i and j indices
+        user_item_subgraph = subgraph_labeling(
+            nodes,
+            distances,
+            self.A,
+            class_values=self.class_values,
+            h=self.h,
+            score=score,
+        )  # node labeling
 
         # side matrix index (item features)
         k = random_nonzero(j, self.v_features)
@@ -139,24 +165,21 @@ class MyDynamicDataset(Dataset):
             self.h,
             self.sample_ratio,
             self.max_nodes_per_hop,
-            g_label,
         )
-        nodes_distances_tpl.append((nodes, distances))
-        nodes = [nd[0] for nd in nodes_distances_tpl]
-        distances = [nd[1] for nd in nodes_distances_tpl]
-        matrices = [self.A, self.v_features]  # main, side
 
-        # node labeling
-        tmp = subgraph_labeling(
+        item_genre_subgraph = subgraph_labeling(
             nodes,
             distances,
-            matrices,
-            class_values=self.class_values,
+            self.v_features,
+            class_values=[1.0],  # show that it exists
             h=self.h,
-            g_label=g_label,
-        )
+            score=0,  # always be 1
+        )  # node labeling
 
-        return construct_pyg_graph(*tmp)
+        user_item_data = construct_pyg_graph(*user_item_subgraph)
+        item_genre_data = construct_pyg_graph(*item_genre_subgraph)
+
+        return user_item_data, item_genre_data
 
 
 """
@@ -164,9 +187,7 @@ class MyDynamicDataset(Dataset):
 """
 
 
-def subgraph_extraction(
-    inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None, class_values=None
-):
+def subgraph_extraction(inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None):
     # extract the h-hop enclosing subgraph around link 'ind'
     dist = 0
     u_index = inds[0]
@@ -221,78 +242,39 @@ def subgraph_extraction(
     return nodes, distances
 
 
-def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_label=1):
-    # TODO: make it dynamic by handling multiple matrices later
-    main_matrix = matrices[0]
-    side_matrix = matrices[1]
-    y_genre = 0  # genre is always because it was selected to be 1 before.
-    u_nodes, v_nodes, w_nodes = raw_nodes[0][0], raw_nodes[0][1], raw_nodes[1][1]
-    u_dist, v_dist, w_dist = (
-        raw_distances[0][0],
-        raw_distances[0][1],
-        raw_distances[1][1],
-    )
-    nodes = [u_nodes, v_nodes, w_nodes]
-    distances = [u_dist, v_dist, w_dist]
+def subgraph_labeling(nodes, distances, adj_matrix, class_values, h=1, score=1):
+    u_nodes, v_nodes = nodes[0], nodes[1]
+    u_dist, v_dist = distances[0], distances[1]
+    subgraph = adj_matrix[u_nodes, :][:, v_nodes]
+    subgraph[0, 0] = 0
 
-    subgraphs = []
-    for i in range(1, len(matrices) + 1):
-        subgraph = matrices[i - 1][nodes[i - 1], :][:, nodes[i]]
-        subgraph[0, 0] = 0
-        subgraphs.append(subgraph)
+    u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
 
-    u, v, r = ssp.find(subgraphs[0])  # r is 1, 2... (rating labels + 1)
-    item_side_ids, genre_ids, genre_values = ssp.find(
-        subgraphs[1]
-    )  # y is 1 (genre exist)
+    # transform r back to rating label
     r = r.astype(int)
-    genre_values = genre_values.astype(int)
+    r = r - 1
 
-    v += len(u_nodes)  # because it will be combined as one list of index [u][v]
-    item_side_ids += len(u_nodes)  # make this index similar to `v` for item
-    genre_ids += len(u_nodes) + len(v_nodes)  # will be [u][v][w]
+    v += len(u_nodes)  # to avoid overlapping indices
 
-    y = class_values[g_label]
+    # returned variables
+    triplet = {"u": u, "v": v, "r": r}
+    node_labels = [x * 2 for x in u_dist] + [x * 2 + 1 for x in v_dist]
+    max_node_label = 2 * h + 1
+    y = class_values[score]  # find actual rating from the expected label
 
-    r = r - 1  # transform r back to rating label
-    genre_values = genre_values - 1
-
-    # Node-labeling process
-    node_labels = []
-    for i in range(len(distances)):
-        node_labels += [h * len(distances) + i for h in distances[i]]
-
-    # Set max node label (2 matrix, 3 relations, 1 hop)
-    max_node_label = h * (len(matrices) * len(distances))
-    indices = {
-        "user_ids": u,
-        "item_ids": v,
-        "genre_ids": genre_ids,
-        "item_side_ids": item_side_ids,
-    }
-    scores = {"r": r, "g": genre_values}
-
-    return indices, scores, node_labels, max_node_label, y
+    return triplet, node_labels, max_node_label, y
 
 
-def construct_pyg_graph(indices, scores, node_labels, max_node_label, y):
-    u, v, w, z = (
-        indices["user_ids"],
-        indices["item_ids"],
-        indices["genre_ids"],
-        indices["item_side_ids"],
-    )
-    r, g = scores["r"], scores["g"]
-    u, v, w, z = (
+def construct_pyg_graph(triplet, node_labels, max_node_label, y):
+    u, v, r = (triplet["u"], triplet["v"], triplet["r"])
+    u, v, r = (
         torch.LongTensor(u),
         torch.LongTensor(v),
-        torch.LongTensor(w),
-        torch.LongTensor(z),
+        torch.LongTensor(r),
     )
-    r, g = torch.LongTensor(r), torch.LongTensor(g)
-    edge_index = torch.stack([torch.cat([u, v, z, w]), torch.cat([v, u, w, z])], 0)
-    edge_type = torch.cat([r, r, g, g])
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label))
+    edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
+    edge_type = torch.cat([r, r])
+    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
     y = torch.FloatTensor([y])
     data = Data(x, edge_index, edge_type=edge_type, y=y)
     return data

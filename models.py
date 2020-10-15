@@ -345,12 +345,9 @@ class IGCMF(GNN):
 
         users = data.x[:, 0] == 1
         items = data.x[:, 1] == 1
-        genres = data.x[:, 2] == 1
 
         # concatenate with the side matrix information
-        x = torch.cat(
-            [concat_states[users], concat_states[items], concat_states[genres]], 1
-        )  # eq 3
+        x = torch.cat([concat_states[users], concat_states[items]], 1)  # eq 3
 
         x = F.leaky_relu(self.lin1(x))
         x = F.dropout(x, p=0.5, training=self.training)

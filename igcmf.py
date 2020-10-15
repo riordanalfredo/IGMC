@@ -405,8 +405,6 @@ def main():
         args.hop,
         args.sample_ratio,
         args.max_nodes_per_hop,
-        u_features,
-        v_features,
         class_values,
         max_num=args.max_train_num,
     )
