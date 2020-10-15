@@ -335,7 +335,7 @@ class IGCMF(GNN):
             data.ig_edge_type,
         )
 
-        def gnn_embedding(x, edge_index, edge_type, u , v):
+        def gnn_embedding(x, edge_index, edge_type, u , v, convs):
             if self.adj_dropout > 0:
                 edge_index, edge_type = dropout_adj(
                     edge_index,
@@ -346,7 +346,7 @@ class IGCMF(GNN):
                     training=self.training,
                 )
             concat_states = []
-            for conv in self.convs1:
+            for conv in convs:
                 x = torch.tanh(conv(x, edge_index, edge_type))
                 concat_states.append(x)
             concat_states = torch.cat(concat_states, 1)  # eq. 2
@@ -359,12 +359,11 @@ class IGCMF(GNN):
 
         users = data.x1[:, 0] == 1
         items = data.x1[:, 1] == 1
-        x1 = gnn_embedding(x1,ui_edge_index,ui_edge_type,users,items)
+        x1 = gnn_embedding(x1,ui_edge_index,ui_edge_type,users,items, self.convs1)
 
         items = data.x2[:, 0] == 1
         genres = data.x2[:, 1] == 1
-        x2 = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres)
-    
+        x2 = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres, self.convs2)
       
         if self.regression:
             return x1[:, 0]* self.multiply_by, x2[:,0] 
