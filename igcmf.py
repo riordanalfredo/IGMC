@@ -405,6 +405,8 @@ def main():
         args.hop,
         args.sample_ratio,
         args.max_nodes_per_hop,
+        u_features,
+        v_features,
         class_values,
         max_num=args.max_train_num,
     )
@@ -443,7 +445,7 @@ def main():
         num_relations = args.num_relations
         multiply_by = args.multiply_by
     else:
-        num_relations = len(class_values) + 1  # for side matrix
+        num_relations = len(class_values)  # for side matrix
         multiply_by = 1
     n_features = (
         0  # NOTE: considering it is using CMF because the features become inputs
@@ -453,7 +455,7 @@ def main():
         train_graphs,
         latent_dim=[32, 32, 32, 32],  # increase latent dimension to 128
         num_relations=num_relations,
-        num_bases=6,
+        num_bases=4,
         regression=True,
         adj_dropout=args.adj_dropout,
         force_undirected=args.force_undirected,

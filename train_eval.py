@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch import tensor
 from torch.optim import Adam
 from sklearn.model_selection import StratifiedKFold
-from torch_geometric.data import DataLoader, DenseDataLoader as DenseLoader
+from torch_geometric.data import Batch, DataLoader, DenseDataLoader as DenseLoader
 from tqdm import tqdm
 import pdb
 import matplotlib
@@ -19,12 +19,6 @@ import matplotlib
 matplotlib.use("Agg")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-def collate(self, data_list):
-    user_item_batch = Batch.from_data_list([data[0] for data in data_list])
-    item_genre_batch = Batch.from_data_list([data[1] for data in data_list])
-    return user_item_batch, item_genre_batch
 
 
 def train_multiple_epochs(
@@ -53,8 +47,8 @@ def train_multiple_epochs(
         train_dataset,
         batch_size,
         shuffle=True,
+        follow_batch=["x1", "x2"],
         num_workers=num_workers,
-        collate_fn=collate,
     )
     if test_dataset.__class__.__name__ == "MyDynamicDataset":
         num_workers = mp.cpu_count()
@@ -64,8 +58,8 @@ def train_multiple_epochs(
         test_dataset,
         batch_size,
         shuffle=False,
+        follow_batch=["x1", "x2"],
         num_workers=num_workers,
-        collate_fn=collate,
     )
 
     model.to(device).reset_parameters()
@@ -154,7 +148,7 @@ def test_once(
 ):
 
     test_loader = DataLoader(
-        test_dataset, batch_size, shuffle=False, collate_fn=collate
+        test_dataset, batch_size, shuffle=False, follow_batch=["x1", "x2"]
     )
     model.to(device)
     t_start = time.perf_counter()
@@ -182,7 +176,7 @@ def num_graphs(data):
     if data.batch is not None:
         return data.num_graphs
     else:
-        return data.x.size(0)
+        return (data.x1.size(0) + data.x2.size(0))/2
 
 
 def train(
@@ -196,6 +190,7 @@ def train(
     epoch=None,
 ):
     model.train()
+    BETA = 0.001
     total_loss = 0
     if show_progress:
         pbar = tqdm(loader)
@@ -204,23 +199,33 @@ def train(
     for data in pbar:
         optimizer.zero_grad()
         data = data.to(device)
-        out = model(data)
+        out1, out2 = model(data)
         if regression:
-            loss = F.mse_loss(out, data.y.view(-1))
+            loss = F.mse_loss(out1, data.y1.view(-1))
+            loss += F.mse_loss(out2, data.y2.view(-1))
         else:
-            loss = F.nll_loss(out, data.y.view(-1))
+            loss = F.nll_loss(out1, data.y1.view(-1))
         if show_progress:
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
-            for gconv in model.convs:
-                w = torch.matmul(gconv.att, gconv.basis.view(gconv.num_bases, -1)).view(
-                    gconv.num_relations, gconv.in_channels, gconv.out_channels
+            for gconv in model.convs1:
+                w = gconv.weight
+                w = (gconv.comp @ w.view(gconv.num_bases, -1)).view(
+                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
                 loss += (
                     ARR * reg_loss
                 )  # ARR is alpha in the paper (default: 0.001) Eq. 7
-        # TODO: I need to add one more regularization for the side matrix
+            for gconv in model.convs2:
+                w = gconv.weight
+                w = (gconv.comp @ w.view(gconv.num_bases, -1)).view(
+                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
+                )
+                g_loss = torch.sum((w[:1, :, :]) ** 2)  # Eq. 6
+                loss += (
+                    BETA * g_loss
+                ) 
         loss.backward()
         total_loss += loss.item() * num_graphs(data)
         optimizer.step()
@@ -239,11 +244,12 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
     for data in pbar:
         data = data.to(device)
         with torch.no_grad():
-            out = model(data)
+            out1, out2 = model(data)
         if regression:
-            loss += F.mse_loss(out, data.y.view(-1), reduction="sum").item()
+            loss += F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
+            loss += F.mse_loss(out2, data.y2.view(-1), reduction="sum").item()
         else:
-            loss += F.nll_loss(out, data.y.view(-1), reduction="sum").item()
+            loss += F.nll_loss(out1, data.y1.view(-1), reduction="sum").item()
         torch.cuda.empty_cache()
     return loss / len(loader.dataset)
 
@@ -273,7 +279,7 @@ def eval_loss_ensemble(
         for data in pbar:
             data = data.to(device)
             if i == 0:
-                ys.append(data.y.view(-1))
+                ys.append(data.y1.view(-1))
             with torch.no_grad():
                 out = model(data)
                 outs.append(out)
@@ -305,11 +311,11 @@ def visualize(
     model.to(device)
     R = []
     Y = []
-    graph_loader = DataLoader(graphs, 50, shuffle=False, collate_fn=collate)
+    graph_loader = DataLoader(graphs, 50, shuffle=False, follow_batch=["x1", "x2"])
     for data in tqdm(graph_loader):
         data = data.to(device)
         r = model(data).detach()
-        y = data.y
+        y = data.y1
         R.extend(r.view(-1).tolist())
         Y.extend(y.view(-1).tolist())
     if sort_by == "true":  # sort graphs by their true ratings

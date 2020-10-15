@@ -86,18 +86,25 @@ class MyDataset(InMemoryDataset):
 
 
 class PairData(Data):
-    def __init__(self, edge_index_s, x_s, edge_index_t, x_t):
+    def __init__(
+        self, x1, ui_edge_index, ui_edge_type, x2, ig_edge_index, ig_edge_type, y1, y2
+    ):
         super(PairData, self).__init__()
-        self.edge_index_s = edge_index_s
-        self.x_s = x_s
-        self.edge_index_t = edge_index_t
-        self.x_t = x_t
+        self.x1 = x1
+        self.ui_edge_index = ui_edge_index
+        self.ui_edge_type = ui_edge_type
+        self.y1 = y1
+
+        self.x2 = x2
+        self.ig_edge_index = ig_edge_index
+        self.ig_edge_type = ig_edge_type
+        self.y2 = y2
 
     def __inc__(self, key, value):
-        if key == "edge_index_s":
-            return self.x_s.size(0)
-        if key == "edge_index_t":
-            return self.x_t.size(0)
+        if key == "ui_edge_index":
+            return self.x1.size(0)
+        if key == "ig_edge_index":
+            return self.x2.size(0)
         else:
             return super(PairData, self).__inc__(key, value)
 
@@ -117,7 +124,7 @@ class MyDynamicDataset(Dataset):
         class_values,
         max_num=None,
     ):
-        # super(MyDynamicDataset, self).__init__(root)
+        super(MyDynamicDataset, self).__init__(root)
         self.A = A
         self.links = links
         self.labels = labels
@@ -141,13 +148,14 @@ class MyDynamicDataset(Dataset):
     # def __getitem__(self, idx):
     #     return self.datasetA[idx], self.datasetB[idx]
 
-    def __getitem__(self, idx):
+    def get(self, idx):
         # rating matrix (user-item)
         i, j = self.links[0][idx], self.links[1][idx]
         score = self.labels[idx]
         nodes, distances = subgraph_extraction(
             (i, j), self.A, self.h, self.sample_ratio, self.max_nodes_per_hop
         )  # i and j indices
+
         user_item_subgraph = subgraph_labeling(
             nodes,
             distances,
@@ -176,10 +184,11 @@ class MyDynamicDataset(Dataset):
             score=0,  # always be 1
         )  # node labeling
 
-        user_item_data = construct_pyg_graph(*user_item_subgraph)
-        item_genre_data = construct_pyg_graph(*item_genre_subgraph)
-
-        return user_item_data, item_genre_data
+        subgraphs_dict = {
+            "user_item": user_item_subgraph,
+            "item_genre": item_genre_subgraph,
+        }
+        return construct_pyg_graph(subgraphs_dict)
 
 
 """
@@ -265,18 +274,29 @@ def subgraph_labeling(nodes, distances, adj_matrix, class_values, h=1, score=1):
     return triplet, node_labels, max_node_label, y
 
 
-def construct_pyg_graph(triplet, node_labels, max_node_label, y):
-    u, v, r = (triplet["u"], triplet["v"], triplet["r"])
-    u, v, r = (
-        torch.LongTensor(u),
-        torch.LongTensor(v),
-        torch.LongTensor(r),
+def construct_pyg_graph(subgraphs):
+    user_item = subgraphs["user_item"]
+    item_genre = subgraphs["item_genre"]
+
+    def graph_variables(triplet, node_labels, max_node_label, y):
+        u, v, r = (triplet["u"], triplet["v"], triplet["r"])
+        u, v, r = (
+            torch.LongTensor(u),
+            torch.LongTensor(v),
+            torch.LongTensor(r),
+        )
+        edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
+        edge_type = torch.cat([r, r])
+        x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
+        y = torch.FloatTensor([y])
+        return x, edge_index, edge_type, y
+
+    x1, ui_edge_index, ui_edge_type, y1 = graph_variables(*user_item)
+    x2, ig_edge_index, ig_edge_type, y2 = graph_variables(*item_genre)
+
+    data = PairData(
+        x1, ui_edge_index, ui_edge_type, x2, ig_edge_index, ig_edge_type, y1=y1, y2=y2
     )
-    edge_index = torch.stack([torch.cat([u, v]), torch.cat([v, u])], 0)
-    edge_type = torch.cat([r, r])
-    x = torch.FloatTensor(one_hot(node_labels, max_node_label + 1))
-    y = torch.FloatTensor([y])
-    data = Data(x, edge_index, edge_type=edge_type, y=y)
     return data
 
 

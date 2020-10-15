@@ -307,52 +307,66 @@ class IGCMF(GNN):
             dataset, GCNConv, latent_dim, regression, adj_dropout, force_undirected
         )
         self.multiply_by = multiply_by
-        self.convs = torch.nn.ModuleList()
-        self.convs.append(
-            gconv(dataset.num_features, latent_dim[0], num_relations, num_bases)
-        )
+        num_features = 4  # for a graph, there are 4 features
+        self.convs1 = torch.nn.ModuleList()
+        self.convs2 = torch.nn.ModuleList()
+
+        # user-item
+        self.convs1.append(gconv(num_features, latent_dim[0], num_relations, num_bases))
         for i in range(0, len(latent_dim) - 1):
-            self.convs.append(
+            self.convs1.append(
                 gconv(latent_dim[i], latent_dim[i + 1], num_relations, num_bases)
             )
-        self.lin1 = Linear(3 * sum(latent_dim), 128)
-        self.side_features = side_features
-        if side_features:
-            self.lin1 = Linear(3 * sum(latent_dim) + n_side_features, 128)
+        # item-genre
+        self.convs2.append(gconv(num_features, latent_dim[0], 1, num_bases))
+        for i in range(0, len(latent_dim) - 1):
+            self.convs2.append(
+                gconv(latent_dim[i], latent_dim[i + 1], 1, num_bases)
+            )
+        self.lin1 = Linear(2 * sum(latent_dim), 128)
 
     def forward(self, data):
-        start = time.time()
-        x, edge_index, edge_type, batch = (
-            data.x,
-            data.edge_index,
-            data.edge_type,
-            data.batch,
+        x1, ui_edge_index, ui_edge_type, x2, ig_edge_index, ig_edge_type = (
+            data.x1,
+            data.ui_edge_index,
+            data.ui_edge_type,
+            data.x2,
+            data.ig_edge_index,
+            data.ig_edge_type,
         )
-        if self.adj_dropout > 0:
-            edge_index, edge_type = dropout_adj(
-                edge_index,
-                edge_type,
-                p=self.adj_dropout,
-                force_undirected=self.force_undirected,
-                num_nodes=len(x),
-                training=self.training,
-            )
-        concat_states = []
-        for conv in self.convs:
-            x = torch.tanh(conv(x, edge_index, edge_type))
-            concat_states.append(x)
-        concat_states = torch.cat(concat_states, 1)  # eq. 2
 
-        users = data.x[:, 0] == 1
-        items = data.x[:, 1] == 1
+        def gnn_embedding(x, edge_index, edge_type, u , v):
+            if self.adj_dropout > 0:
+                edge_index, edge_type = dropout_adj(
+                    edge_index,
+                    edge_type,
+                    p=self.adj_dropout,
+                    force_undirected=self.force_undirected,
+                    num_nodes=len(x),
+                    training=self.training,
+                )
+            concat_states = []
+            for conv in self.convs1:
+                x = torch.tanh(conv(x, edge_index, edge_type))
+                concat_states.append(x)
+            concat_states = torch.cat(concat_states, 1)  # eq. 2
 
-        # concatenate with the side matrix information
-        x = torch.cat([concat_states[users], concat_states[items]], 1)  # eq 3
+            x = torch.cat([concat_states[u], concat_states[v]], 1)  
+            x = F.leaky_relu(self.lin1(x))
+            x = F.dropout(x, p=0.5, training=self.training)
+            x = self.lin2(x)
+            return x
 
-        x = F.leaky_relu(self.lin1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = self.lin2(x)
+        users = data.x1[:, 0] == 1
+        items = data.x1[:, 1] == 1
+        x1 = gnn_embedding(x1,ui_edge_index,ui_edge_type,users,items)
+
+        items = data.x2[:, 0] == 1
+        genres = data.x2[:, 1] == 1
+        x2 = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres)
+    
+      
         if self.regression:
-            return x[:, 0] * self.multiply_by
+            return x1[:, 0]* self.multiply_by, x2[:,0] 
         else:
             return F.log_softmax(x, dim=-1)
