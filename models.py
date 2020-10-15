@@ -337,12 +337,11 @@ class IGCMF(GNN):
                 num_nodes=len(x),
                 training=self.training,
             )
-        print(edge_index)
         concat_states = []
         for conv in self.convs:
-            x = torch.tanh(conv(x, edge_index, edge_type)) 
+            x = torch.tanh(conv(x, edge_index, edge_type))
             concat_states.append(x)
-        concat_states = torch.cat(concat_states, 1) # eq. 2
+        concat_states = torch.cat(concat_states, 1)  # eq. 2
 
         users = data.x[:, 0] == 1
         items = data.x[:, 1] == 1
