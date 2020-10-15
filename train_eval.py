@@ -201,8 +201,8 @@ def train(
         data = data.to(device)
         out1, out2 = model(data)
         if regression:
-            loss = F.mse_loss(out1, data.y1.view(-1))
-            loss += F.mse_loss(out2, data.y2.view(-1))
+            loss1 = F.mse_loss(out1, data.y1.view(-1))
+            loss2 = F.mse_loss(out2, data.y2.view(-1))
         else:
             loss = F.nll_loss(out1, data.y1.view(-1))
         if show_progress:
@@ -210,24 +210,17 @@ def train(
         if ARR != 0:
             for gconv in model.convs1:
                 w = gconv.weight
-                w = (gconv.comp @ w.view(gconv.num_bases, -1)).view(
-                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
-                )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
-                loss += (
-                    ARR * reg_loss
-                )  # ARR is alpha in the paper (default: 0.001) Eq. 7
+                loss1 += ARR * reg_loss
+                # ARR is alpha in the paper (default: 0.001) Eq. 7
             for gconv in model.convs2:
                 w = gconv.weight
-                w = (gconv.comp @ w.view(gconv.num_bases, -1)).view(
-                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
-                )
                 g_loss = torch.sum((w[:1, :, :]) ** 2)  # Eq. 6
-                loss += (
-                    BETA * g_loss
-                ) 
+                loss2 += BETA * g_loss
+                
+        loss = loss1 + loss2
         loss.backward()
-        total_loss += loss.item() * num_graphs(data)
+        total_loss += loss.item() * (20*2) # 2 graphs
         optimizer.step()
         torch.cuda.empty_cache()
     return total_loss / len(loader.dataset)
