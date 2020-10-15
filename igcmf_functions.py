@@ -248,16 +248,14 @@ def subgraph_labeling(raw_nodes, raw_distances, matrices, class_values, h=1, g_l
     r = r.astype(int)
     genre_values = genre_values.astype(int)
 
-    v += len(u_nodes)  # starting point
-    item_side_ids += len(u_nodes)
-    genre_ids += len(u_nodes) + len(v_nodes)  # starting point
+    v += len(u_nodes)  # because it will be combined as one list of index [u][v]
+    item_side_ids += len(u_nodes)  # make this index similar to `v` for item
+    genre_ids += len(u_nodes) + len(v_nodes)  # will be [u][v][w]
 
     y = class_values[g_label]
 
     r = r - 1  # transform r back to rating label
-    genre_values = (
-        genre_values - 1 + len(class_values)
-    )  # NOTE: 6, because we want it to be separated from [1,2,3,4,5] rating
+    genre_values = genre_values - 1
 
     # Node-labeling process
     node_labels = []
