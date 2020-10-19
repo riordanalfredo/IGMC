@@ -451,6 +451,14 @@ def main():
         0  # NOTE: considering it is using CMF because the features become inputs
     )
 
+    # Determine testing data (on which data to evaluate the trained model
+    if not args.testing: 
+        test_graphs = val_graphs
+    print('Used #train graphs: %d, #test graphs: %d' % (
+        len(train_graphs), 
+        len(test_graphs), 
+    ))
+
     model = IGCMF(
         train_graphs,
         latent_dim=[32, 32, 32, 32],  # increase latent dimension to 128
@@ -488,6 +496,7 @@ def main():
                 torch.save(model.state_dict(), model_name)
             if optimizer is not None:
                 torch.save(optimizer.state_dict(), optimizer_name)
+
 
     if not args.no_train:
         # Train under multiple epochs
