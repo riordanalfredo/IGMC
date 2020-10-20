@@ -257,20 +257,30 @@ def run():
     print(args)
 
     def logger(info, model, optimizer):
-    epoch, train_loss, test_rmse = info['epoch'], info['train_loss'], info['test_rmse']
-    with open(os.path.join(args.res_dir, 'log.txt'), 'a') as f:
-        f.write('Epoch {}, train loss {:.4f}, test rmse {:.6f}\n'.format(
-            epoch, train_loss, test_rmse))
-    if type(epoch) == int and epoch % args.save_interval == 0:
-        print('Saving model states...')
-        model_name = os.path.join(args.res_dir, 'model_checkpoint{}.pth'.format(epoch))
-        optimizer_name = os.path.join(
-            args.res_dir, 'optimizer_checkpoint{}.pth'.format(epoch)
+        epoch, train_loss, test_rmse = (
+            info["epoch"],
+            info["train_loss"],
+            info["test_rmse"],
         )
-        if model is not None:
-            torch.save(model.state_dict(), model_name)
-        if optimizer is not None:
-            torch.save(optimizer.state_dict(), optimizer_name)
+        with open(os.path.join(args.res_dir, "log.txt"), "a") as f:
+            f.write(
+                "Epoch {}, train loss {:.4f}, test rmse {:.6f}\n".format(
+                    epoch, train_loss, test_rmse
+                )
+            )
+        if type(epoch) == int and epoch % args.save_interval == 0:
+            print("Saving model states...")
+            model_name = os.path.join(
+                args.res_dir, "model_checkpoint{}.pth".format(epoch)
+            )
+            optimizer_name = os.path.join(
+                args.res_dir, "optimizer_checkpoint{}.pth".format(epoch)
+            )
+            if model is not None:
+                torch.save(model.state_dict(), model_name)
+            if optimizer is not None:
+                torch.save(optimizer.state_dict(), optimizer_name)
+
     random.seed(args.seed)
     np.random.seed(args.seed)
     args.hop = int(args.hop)
