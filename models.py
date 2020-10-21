@@ -366,6 +366,6 @@ class IGCMF(GNN):
         x2 = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres, self.convs2)
       
         if self.regression:
-            return x1[:, 0]* self.multiply_by
+            return x1[:, 0]* self.multiply_by, x2[:, 0]
         else:
             return F.log_softmax(x1, dim=-1)
