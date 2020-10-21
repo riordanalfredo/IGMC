@@ -166,7 +166,7 @@ class MyDynamicDataset(Dataset):
         )  # node labeling
 
         # side matrix index (item features)
-        k = random_nonzero(j, self.v_features)
+        k = random_nonzero(j, self.v_features)  # TODO: could this be an issue?
         nodes, distances = subgraph_extraction(
             (j, k),
             self.v_features,
@@ -298,8 +298,7 @@ def construct_pyg_graph(subgraphs):
         x1, ui_edge_index, ui_edge_type, x2, ig_edge_index, ig_edge_type, y1=y1, y2=y2
     )
     return data
-
-
+    
 def random_nonzero(index, matrix):
     tpl = np.nonzero(matrix[index])
     return random.choice(tpl[1])  # because the first index will always be 0
@@ -388,7 +387,6 @@ def collective_links2subgraphs(
             )
         )
     return g_list
-
 
 def subgraph_extraction_labeling(
     ind,
