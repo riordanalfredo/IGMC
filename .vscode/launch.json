@@ -21,8 +21,8 @@
       "--dynamic-val",
       "--epochs",
       "50",
-      "--lr",
-      "1e-2",
+      "--max-nodes-per-hop",
+      "200",
       "--ensemble"
     ],
     "console": "integratedTerminal"
