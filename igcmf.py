@@ -270,7 +270,8 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
     args.hop = int(args.hop)
-
+    if args.max_nodes_per_hop is not None:
+        args.max_nodes_per_hop = int(args.max_nodes_per_hop)
     rating_map, post_rating_map = None, {
         x: int(i // (5 / args.num_relations))
         for i, x in enumerate(np.arange(1, 6).tolist())
