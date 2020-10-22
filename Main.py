@@ -28,23 +28,6 @@ def warn_with_traceback(message, category, filename, lineno, file=None, line=Non
     log.write(warnings.formatwarning(
         message, category, filename, lineno, line))
 
-
-def logger(info, model, optimizer):
-    epoch, train_loss, test_rmse = info['epoch'], info['train_loss'], info['test_rmse']
-    with open(os.path.join(args.res_dir, 'log.txt'), 'a') as f:
-        f.write('Epoch {}, train loss {:.4f}, test rmse {:.6f}\n'.format(
-            epoch, train_loss, test_rmse))
-    if type(epoch) == int and epoch % args.save_interval == 0:
-        print('Saving model states...')
-        model_name = os.path.join(args.res_dir, 'model_checkpoint{}.pth'.format(epoch))
-        optimizer_name = os.path.join(
-            args.res_dir, 'optimizer_checkpoint{}.pth'.format(epoch)
-        )
-        if model is not None:
-            torch.save(model.state_dict(), model_name)
-        if optimizer is not None:
-            torch.save(optimizer.state_dict(), optimizer_name)
-
 def run():
     # Arguments
     parser = argparse.ArgumentParser(
@@ -149,6 +132,22 @@ def run():
     args.hop = int(args.hop)
     if args.max_nodes_per_hop is not None:
         args.max_nodes_per_hop = int(args.max_nodes_per_hop)
+    
+    def logger(info, model, optimizer):
+        epoch, train_loss, test_rmse = info['epoch'], info['train_loss'], info['test_rmse']
+        with open(os.path.join(args.res_dir, 'log.txt'), 'a') as f:
+            f.write('Epoch {}, train loss {:.4f}, test rmse {:.6f}\n'.format(
+                epoch, train_loss, test_rmse))
+        if type(epoch) == int and epoch % args.save_interval == 0:
+            print('Saving model states...')
+            model_name = os.path.join(args.res_dir, 'model_checkpoint{}.pth'.format(epoch))
+            optimizer_name = os.path.join(
+                args.res_dir, 'optimizer_checkpoint{}.pth'.format(epoch)
+            )
+            if model is not None:
+                torch.save(model.state_dict(), model_name)
+            if optimizer is not None:
+                torch.save(optimizer.state_dict(), optimizer_name)
 
     rating_map, post_rating_map = None, None
     if args.standard_rating:
