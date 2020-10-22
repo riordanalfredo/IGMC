@@ -15,13 +15,14 @@
       "--debug",
       "--use-features",
       "--batch-size",
-      "20",
+      "10",
       "--dynamic-train",
       "--dynamic-test",
       "--dynamic-val",
       "--epochs",
-      "50",
-      "--ensemble"
+      "80",
+      "--ensemble",
+      "--testing"
     ],
     "console": "integratedTerminal"
   }]
