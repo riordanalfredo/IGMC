@@ -199,10 +199,10 @@ def train(
     for data in pbar:
         optimizer.zero_grad()
         data = data.to(device)
-        out1 = model(data)
+        out1, out2 = model(data)
         if regression:
-            loss = F.mse_loss(out1, data.y1.view(-1))
-            #loss2 = F.mse_loss(out2, data.y2.view(-1))
+            loss1 = F.mse_loss(out1, data.y1.view(-1))
+            loss2 = F.mse_loss(out2, data.y2.view(-1))
         else:
             loss = F.nll_loss(out1, data.y1.view(-1))
         if show_progress:
@@ -212,13 +212,13 @@ def train(
                 w = (gconv.comp @ gconv.weight.view(gconv.num_bases, -1)).view(
                 gconv.num_relations, gconv.in_channels_l, gconv.out_channels)
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
-                loss += ARR * reg_loss
+                loss1 += ARR * reg_loss
                 # ARR is alpha in the paper (default: 0.001) Eq. 7
-            # for gconv in model.convs2:
-            #     w = gconv.weight
-            #     g_loss = torch.sum((w[:-1, :, :]) ** 2)  # Eq. 6
-            #     loss2 += BETA * g_loss
-                
+            for gconv in model.convs2:
+                w = gconv.weight
+                g_loss = torch.sum((w[:-1, :, :]) ** 2)  # Eq. 6
+                loss2 += BETA * g_loss
+        loss = loss1 + loss2
         loss.backward()
         total_loss += loss.item() * (20) # 2 graphs
         optimizer.step()
@@ -237,10 +237,10 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
     for data in pbar:
         data = data.to(device)
         with torch.no_grad():
-            out1 = model(data)
+            out1, out2 = model(data)
         if regression:
             loss += F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
-            # loss += F.mse_loss(out2, data.y2.view(-1), reduction="sum").item()
+            loss += F.mse_loss(out2, data.y2.view(-1), reduction="sum").item()
         else:
             loss += F.nll_loss(out1, data.y1.view(-1), reduction="sum").item()
         torch.cuda.empty_cache()
@@ -257,7 +257,8 @@ def eval_loss_ensemble(
     model, checkpoints, loader, device, regression=False, show_progress=False
 ):
     loss = 0
-    Outs = []
+    Outs1 = []
+    Outs2 = []
     for i, checkpoint in enumerate(checkpoints):
         if show_progress:
             print("Testing begins...")
@@ -266,25 +267,34 @@ def eval_loss_ensemble(
             pbar = loader
         model.load_state_dict(torch.load(checkpoint))
         model.eval()
-        outs = []
+        outs1 = []
+        outs2 = []
         if i == 0:
-            ys = []
+            ys1 = []
+            ys2 = []
         for data in pbar:
             data = data.to(device)
             if i == 0:
-                ys.append(data.y1.view(-1))
+                ys1.append(data.y1.view(-1))
+                ys2.append(data.y2.view(-1))
             with torch.no_grad():
-                out = model(data)
-                outs.append(out)
+                out1,out2 = model(data)
+                outs1.append(out1)
+                outs2.append(out2)
         if i == 0:
-            ys = torch.cat(ys, 0)
-        outs = torch.cat(outs, 0).view(-1, 1)
-        Outs.append(outs)
-    Outs = torch.cat(Outs, 1).mean(1)
+            ys1 = torch.cat(ys1, 0)
+            ys2 = torch.cat(ys2, 0)
+        outs1 = torch.cat(outs1, 0).view(-1, 1)
+        outs2 = torch.cat(outs2, 0).view(-1, 1)
+        Outs1.append(outs1)
+        Outs2.append(outs2)
+    Outs1 = torch.cat(Outs1, 1).mean(1)
+    Outs2 = torch.cat(Outs2, 1).mean(1)
     if regression:
-        loss += F.mse_loss(Outs, ys, reduction="sum").item()
+        loss += F.mse_loss(Outs1, ys1, reduction="sum").item()
+        loss += F.mse_loss(Outs2, ys2, reduction="sum").item()
     else:
-        loss += F.nll_loss(Outs, ys, reduction="sum").item()
+        loss += F.nll_loss(Outs, ys, reduction="sum").item() # TODO
     torch.cuda.empty_cache()
     return loss / len(loader.dataset)
 

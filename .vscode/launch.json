@@ -26,7 +26,8 @@
       "50",
       "--max-nodes-per-hop",
       "200",
-      "--ensemble"
+      "--ensemble",
+      "--no-train"
     ],
     "console": "integratedTerminal"
   }]
