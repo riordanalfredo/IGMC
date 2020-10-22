@@ -220,7 +220,7 @@ def train(
                 loss2 += BETA * g_loss
         loss = loss1 + loss2
         loss.backward()
-        total_loss += loss.item() * (20) # 2 graphs
+        total_loss += loss.item() * (40) # 2 graphs
         optimizer.step()
         torch.cuda.empty_cache()
     return total_loss / len(loader.dataset)
