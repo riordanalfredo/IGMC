@@ -176,7 +176,7 @@ def num_graphs(data):
     if data.batch is not None:
         return data.num_graphs
     else:
-        return (data.x1.size(0) + data.x2.size(0))/2
+        return (data.x1.size(0) + data.x2.size(0)) / 2
 
 
 def train(
@@ -210,17 +210,18 @@ def train(
         if ARR != 0:
             for gconv in model.convs1:
                 w = (gconv.comp @ gconv.weight.view(gconv.num_bases, -1)).view(
-                gconv.num_relations, gconv.in_channels_l, gconv.out_channels)
+                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
+                )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
                 loss1 += ARR * reg_loss
                 # ARR is alpha in the paper (default: 0.001) Eq. 7
             for gconv in model.convs2:
                 w = gconv.weight
-                g_loss = torch.sum((w[:, :, :]) ** 2)  # Eq. 6
+                g_loss = torch.sum((w[:-1, :, :]) ** 2)  # Eq. 6
                 loss2 += BETA * g_loss
         loss = loss1 + loss2
         loss.backward()
-        total_loss += loss.item() * (20) # 2 graphs TODO
+        total_loss += loss.item() * (40)  # 2 graphs TODO
         optimizer.step()
         torch.cuda.empty_cache()
     return total_loss / len(loader.dataset)
@@ -240,7 +241,9 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
             out1, out2 = model(data)
         if regression:
             loss += F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
-            loss += F.binary_cross_entropy_with_logits(out2, data.y2.view(-1), reduction="sum").item()
+            loss += F.binary_cross_entropy_with_logits(
+                out2, data.y2.view(-1), reduction="sum"
+            ).item()
         else:
             loss += F.nll_loss(out1, data.y1.view(-1), reduction="sum").item()
         torch.cuda.empty_cache()
@@ -278,7 +281,7 @@ def eval_loss_ensemble(
                 ys1.append(data.y1.view(-1))
                 ys2.append(data.y2.view(-1))
             with torch.no_grad():
-                out1,out2 = model(data)
+                out1, out2 = model(data)
                 outs1.append(out1)
                 outs2.append(out2)
         if i == 0:
@@ -294,7 +297,7 @@ def eval_loss_ensemble(
         loss += F.mse_loss(Outs1, ys1, reduction="sum").item()
         loss += F.binary_cross_entropy_with_logits(Outs2, ys2, reduction="sum").item()
     else:
-        loss += F.nll_loss(Outs, ys, reduction="sum").item() # TODO
+        loss += F.nll_loss(Outs, ys, reduction="sum").item()  # TODO
     torch.cuda.empty_cache()
     return loss / len(loader.dataset)
 
