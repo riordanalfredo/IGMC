@@ -19,15 +19,11 @@
       "--dynamic-val",
       "--batch-size",
       "20",
-      "--dynamic-train",
-      "--dynamic-test",
-      "--dynamic-val",
       "--epochs",
       "50",
-      "--max-nodes-per-hop",
-      "200",
+      "--lr",
+      "1e-3",
       "--ensemble",
-      "--no-train"
     ],
     "console": "integratedTerminal"
   }]
