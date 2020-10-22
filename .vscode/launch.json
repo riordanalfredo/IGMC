@@ -20,9 +20,9 @@
       "--batch-size",
       "20",
       "--epochs",
+      "80",
+      "--continue-from",
       "50",
-      "--lr",
-      "1e-3",
       "--ensemble",
     ],
     "console": "integratedTerminal"
