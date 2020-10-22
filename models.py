@@ -318,7 +318,7 @@ class IGCMF(GNN):
                 gconv(latent_dim[i], latent_dim[i + 1], num_relations, num_bases)
             )
         # item-genre
-        self.convs2.append(gconv(num_features, latent_dim[0], 1, num_bases))
+        self.convs2.append(gconv(num_features, latent_dim[0], 2, num_bases))
         for i in range(0, len(latent_dim) - 1):
             self.convs2.append(
                 gconv(latent_dim[i], latent_dim[i + 1], 1, num_bases)

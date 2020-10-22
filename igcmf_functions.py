@@ -182,6 +182,7 @@ class MyDynamicDataset(Dataset):
             class_values=[1.0],  # show that it exists
             h=self.h,
             score=0,  # always be 1
+            is_neg_sampling=True
         )  # node labeling
 
         subgraphs_dict = {
@@ -250,15 +251,22 @@ def subgraph_extraction(inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None):
 
     return nodes, distances
 
+def negative_sampling_coordinates(A):
+    A = ssp.coo_matrix(A, copy=True)
+    A.sum_duplicates()
+    return A.row, A.col, A.data
 
-def subgraph_labeling(nodes, distances, adj_matrix, class_values, h=1, score=1):
+def subgraph_labeling(nodes, distances, adj_matrix, class_values, h=1, score=1, is_neg_sampling=False):
     u_nodes, v_nodes = nodes[0], nodes[1]
     u_dist, v_dist = distances[0], distances[1]
     subgraph = adj_matrix[u_nodes, :][:, v_nodes]
     subgraph[0, 0] = 0
 
-    u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
-
+    if(is_neg_sampling):
+        u, v, r = negative_sampling_coordinates(subgraph)
+    else:
+        u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
+    
     # transform r back to rating label
     r = r.astype(int)
     r = r - 1
