@@ -202,7 +202,7 @@ def train(
         out1, out2 = model(data)
         if regression:
             loss1 = F.mse_loss(out1, data.y1.view(-1))
-            loss2 = F.mse_loss(out2, data.y2.view(-1))
+            loss2 = F.binary_cross_entropy_with_logits(out2, data.y2.view(-1))
         else:
             loss = F.nll_loss(out1, data.y1.view(-1))
         if show_progress:
@@ -216,11 +216,11 @@ def train(
                 # ARR is alpha in the paper (default: 0.001) Eq. 7
             for gconv in model.convs2:
                 w = gconv.weight
-                g_loss = torch.sum((w[:-1, :, :]) ** 2)  # Eq. 6
+                g_loss = torch.sum((w[:, :, :]) ** 2)  # Eq. 6
                 loss2 += BETA * g_loss
         loss = loss1 + loss2
         loss.backward()
-        total_loss += loss.item() * (40) # 2 graphs
+        total_loss += loss.item() * (20) # 2 graphs TODO
         optimizer.step()
         torch.cuda.empty_cache()
     return total_loss / len(loader.dataset)
@@ -240,7 +240,7 @@ def eval_loss(model, loader, device, regression=False, show_progress=False):
             out1, out2 = model(data)
         if regression:
             loss += F.mse_loss(out1, data.y1.view(-1), reduction="sum").item()
-            loss += F.mse_loss(out2, data.y2.view(-1), reduction="sum").item()
+            loss += F.binary_cross_entropy_with_logits(out2, data.y2.view(-1), reduction="sum").item()
         else:
             loss += F.nll_loss(out1, data.y1.view(-1), reduction="sum").item()
         torch.cuda.empty_cache()
@@ -292,7 +292,7 @@ def eval_loss_ensemble(
     Outs2 = torch.cat(Outs2, 1).mean(1)
     if regression:
         loss += F.mse_loss(Outs1, ys1, reduction="sum").item()
-        loss += F.mse_loss(Outs2, ys2, reduction="sum").item()
+        loss += F.binary_cross_entropy_with_logits(Outs2, ys2, reduction="sum").item()
     else:
         loss += F.nll_loss(Outs, ys, reduction="sum").item() # TODO
     torch.cuda.empty_cache()
