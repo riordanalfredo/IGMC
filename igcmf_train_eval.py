@@ -216,8 +216,10 @@ def train(
                 loss1 += ARR * reg_loss
                 # ARR is alpha in the paper (default: 0.001) Eq. 7
             for gconv in model.convs2:
-                w = gconv.weight
-                g_loss = torch.sum((w[:-1, :, :]) ** 2)  # Eq. 6
+                w = (gconv.comp @ gconv.weight.view(gconv.num_bases, -1)).view(
+                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
+                )
+                g_loss = torch.norm(w)  # Eq. 6
                 loss2 += BETA * g_loss
         loss = loss1 + loss2
         loss.backward()
