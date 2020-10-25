@@ -197,8 +197,8 @@ def train(
             pbar.set_description("Epoch {}, batch loss: {}".format(epoch, loss.item()))
         if ARR != 0:
             for gconv in model.convs:
-                w = torch.matmul(gconv.att, gconv.basis.view(gconv.num_bases, -1)).view(
-                    gconv.num_relations, gconv.in_channels, gconv.out_channels
+                w = (gconv.comp @ gconv.weight.view(gconv.num_bases, -1)).view(
+                    gconv.num_relations, gconv.in_channels_l, gconv.out_channels
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
                 loss += (
