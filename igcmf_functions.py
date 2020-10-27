@@ -123,6 +123,7 @@ class MyDynamicDataset(Dataset):
         v_features,
         class_values,
         max_num=None,
+        neg_sample_ratio=None
     ):
         super(MyDynamicDataset, self).__init__(root)
         self.A = A
@@ -130,6 +131,7 @@ class MyDynamicDataset(Dataset):
         self.labels = labels
         self.h = h
         self.sample_ratio = sample_ratio
+        self.neg_sample_ratio = neg_sample_ratio
         self.max_nodes_per_hop = max_nodes_per_hop
         self.u_features = u_features
         self.v_features = v_features
@@ -183,6 +185,7 @@ class MyDynamicDataset(Dataset):
             h=self.h,
             score=0,  # always be 1
             is_neg_sampling=True,
+            neg_ratio=self.neg_sample_ratio
         )  # node labeling
 
         subgraphs_dict = {

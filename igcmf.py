@@ -259,7 +259,7 @@ def parsers():
     )
 
     # negative-sampling ratio
-    parser.add_argument('--neg-sampling-ratio', type=int, default=3,
+    parser.add_argument('--neg-sample-ratio', type=int, default=3,
                         help="For side information subgraph, it is either [1,3,5,10] to sample the ratio between item and genre. See By default, the ratio is 1:3 from related connections")
     return parser
 
@@ -420,6 +420,7 @@ def main():
         v_features,
         class_values,
         max_num=args.max_train_num,
+        neg_sample_ratio= args.neg_sample_ratio,
     )
     dataset_class = "MyDynamicDataset" if args.dynamic_test else "MyDataset"
     test_graphs = eval(dataset_class)(
@@ -434,6 +435,7 @@ def main():
         v_features,
         class_values,
         max_num=args.max_test_num,
+        neg_sample_ratio= args.neg_sample_ratio,
     )
     if not args.testing:
         dataset_class = "MyDynamicDataset" if args.dynamic_val else "MyDataset"
@@ -449,6 +451,7 @@ def main():
             v_features,
             class_values,
             max_num=args.max_val_num,
+            neg_sample_ratio= args.neg_sample_ratio,
         )
 
     # IGMC GNN model (default)
