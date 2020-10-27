@@ -191,12 +191,9 @@ class MyDynamicDataset(Dataset):
         }
         return construct_pyg_graph(subgraphs_dict)
 
-
 """
     Method to extract the subgraph from collective matrices
 """
-
-
 def subgraph_extraction(inds, A, h=1, sample_ratio=1.0, max_nodes_per_hop=None):
     # extract the h-hop enclosing subgraph around link 'ind'
     dist = 0
@@ -257,20 +254,47 @@ def negative_sampling_coordinates(A):
     A.sum_duplicates()
     return A.row, A.col, A.data
 
+"""
+    Get negative sample nodes
+"""
+def get_neg_nodes(genre_nodes, A, neg_ratio=3):
+    l = len(genre_nodes)
+    max_l = len(A[0])
+    neg_l = l * neg_ratio
+    neg_nodes = [x-1 for x in range(1, max_l+1) if x not in genre_nodes]
+    res_list = []
+
+    if(neg_l < max_l - l):
+        res_list = random.choices(neg_nodes, k=neg_l)
+    else:
+        res_list = neg_nodes
+    return res_list
+
+def find_with_neg_samples(subgraph, ori_nodes, neg_nodes):
+    u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)    
+    val = float(0)
+    r_neg = [val for _ in range(len(neg_nodes))]
+    u_neg_ind = [x for x in range(1, len(neg_nodes)+1)]
+    u += u_neg_ind
+    v += neg_nodes
+    r += r_neg
+    return u,v,r
 
 def subgraph_labeling(
-    nodes, distances, adj_matrix, class_values, h=1, score=1, is_neg_sampling=False
+    nodes, distances, adj_matrix, class_values, h=1, score=1, is_neg_sampling=False, neg_ratio=3
 ):
     u_nodes, v_nodes = nodes[0], nodes[1]
     u_dist, v_dist = distances[0], distances[1]
     subgraph = adj_matrix[u_nodes, :][:, v_nodes]
     subgraph[0, 0] = 0
 
-    if is_neg_sampling:
-        u, v, r = negative_sampling_coordinates(subgraph)
-    else:
+    if not is_neg_sampling:
         u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
-
+    else:
+        # NOTE: we assign v_nodes = genre nodes
+        v_neg_nodes = get_neg_nodes(v_nodes, adj_matrix, neg_ratio)
+        u, v, r = find_with_neg_samples(subgraph, v_nodes, v_neg_nodes)
+       
     # transform r back to rating label
     r = r.astype(int)
     r = r - 1

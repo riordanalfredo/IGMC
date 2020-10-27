@@ -257,6 +257,10 @@ def parsers():
         help="For ml datasets, if ratio < 1, downsample training data to the\
                         target ratio",
     )
+
+    # negative-sampling ratio
+    parser.add_argument('--neg-sampling-ratio', type=int, default=3,
+                        help="For side information subgraph, it is either [1,3,5,10] to sample the ratio between item and genre. See By default, the ratio is 1:3 from related connections")
     return parser
 
 
@@ -354,28 +358,7 @@ def main():
         ) = load_official_trainvaltest_split(
             args.data_name, args.testing, rating_map, post_rating_map, args.ratio
         )
-        # data_obj = load_official_trainvaltest_split(
-        #     args.data_name,
-        #     args.testing,
-        #     rating_map,
-        #     post_rating_map,
-        #     args.ratio,
-        # )
-    """
-      4. Get the side feature data, uses data extraction from matlab file (Monti et al)
-    """
-    # if args.use_cmf:
-    #     loaded_data = igcmf_loader(args.data_name, 'user')
-    #     userFeaturesData = load_data_monti(
-    #         loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
-
-    #     loaded_data = igcmf_loader(args.data_name, 'item')
-    #     itemFeaturesData = load_data_monti(
-    #         loaded_data, args.testing, is_cmf=True, is_debug=args.debug)
-
-    #     # add to objects of dataset
-    #     datasets.append(userFeaturesData)
-    #     datasets.append(itemFeaturesData)
+    
     """
         Check if data is debuggable or not 
     """
