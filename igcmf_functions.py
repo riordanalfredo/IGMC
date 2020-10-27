@@ -257,27 +257,30 @@ def negative_sampling_coordinates(A):
 """
     Get negative sample nodes
 """
-def get_neg_nodes(genre_nodes, A, neg_ratio=3):
-    l = len(genre_nodes)
-    max_l = len(A[0])
+def get_neg_nodes(u_node, v_nodes, A, neg_ratio=3):
+    l = len(v_nodes)
+    max_l = A.get_shape()[1]
     neg_l = l * neg_ratio
-    neg_nodes = [x-1 for x in range(1, max_l+1) if x not in genre_nodes]
+    neg_nodes = [x for x in range(max_l) if x not in v_nodes]
     res_list = []
 
     if(neg_l < max_l - l):
         res_list = random.choices(neg_nodes, k=neg_l)
     else:
         res_list = neg_nodes
-    return res_list
+    u_list = [u_node for x in range(len(res_list))]
+    v_list = res_list    
+    return u_list, v_list
 
 def find_with_neg_samples(subgraph, ori_nodes, neg_nodes):
     u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)    
     val = float(0)
     r_neg = [val for _ in range(len(neg_nodes))]
-    u_neg_ind = [x for x in range(1, len(neg_nodes)+1)]
-    u += u_neg_ind
-    v += neg_nodes
-    r += r_neg
+    u_neg_ind = [0 for _ in range(len(neg_nodes))]
+    v_neg_ind = [x for x in range(1, len(neg_nodes)+1)]
+    u = np.append(u,u_neg_ind)
+    v = np.append(v,v_neg_ind)
+    r = np.append(r,r_neg)
     return u,v,r
 
 def subgraph_labeling(
@@ -292,7 +295,9 @@ def subgraph_labeling(
         u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)
     else:
         # NOTE: we assign v_nodes = genre nodes
-        v_neg_nodes = get_neg_nodes(v_nodes, adj_matrix, neg_ratio)
+        u_node = u_nodes[0]
+        u_neg_nodes, v_neg_nodes = get_neg_nodes(u_node, v_nodes, adj_matrix, neg_ratio)
+        v_dist.extend([1 for x in range(len(u_neg_nodes))]) # new genre nodes are new neighbours
         u, v, r = find_with_neg_samples(subgraph, v_nodes, v_neg_nodes)
        
     # transform r back to rating label
