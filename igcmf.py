@@ -213,6 +213,12 @@ def parsers():
                         differences between graph convolution parameters W associated with\
                         adjacent ratings",
     )
+    parser.add_argument(
+        "--BETA",
+        type=float,
+        default=0.001,
+        help="Genre regularizer. If not 0, regularize the differences between graph convolution parameters W associated with adjacent ratings",
+    )
     # transfer learning, ensemble, and visualization settings
     parser.add_argument(
         "--transfer",
@@ -278,10 +284,33 @@ def main():
     if args.max_nodes_per_hop is not None:
         args.max_nodes_per_hop = int(args.max_nodes_per_hop)
 
-    rating_map, post_rating_map = None, {
-        x: int(i // (5 / args.num_relations))
-        for i, x in enumerate(np.arange(1, 6).tolist())
-    }  # refer to IGMC to use rating map
+    rating_map, post_rating_map = None, None
+    if args.standard_rating:
+        if args.data_name in ['flixster', 'ml_10m']:  # original 0.5, 1, ..., 5
+            rating_map = {x: int(math.ceil(x))
+                          for x in np.arange(0.5, 5.01, 0.5).tolist()}
+        elif args.data_name == 'yahoo_music':  # original 1, 2, ..., 100
+            rating_map = {x: (x-1)//20+1 for x in range(1, 101)}
+        else:
+            rating_map = None
+
+    if args.transfer:
+        if args.data_name in ['flixster', 'ml_10m']:  # original 0.5, 1, ..., 5
+            post_rating_map = {
+                x: int(i // (10 / args.num_relations))
+                for i, x in enumerate(np.arange(0.5, 5.01, 0.5).tolist())
+            }
+        elif args.data_name == 'yahoo_music':  # original 1, 2, ..., 100
+            post_rating_map = {
+                x: int(i // (100 / args.num_relations))
+                for i, x in enumerate(np.arange(1, 101).tolist())
+            }
+        else:  # assume other datasets have standard ratings 1, 2, 3, 4, 5
+            post_rating_map = {
+                x: int(i // (5 / args.num_relations))
+                for i, x in enumerate(np.arange(1, 6).tolist())
+            }
+
 
     def logger(info, model, optimizer):
         epoch, train_loss, test_rmse = (
@@ -324,15 +353,26 @@ def main():
     """
       2. Transfer Learning
     """
-    if args.transfer == "":
-        args.model_pos = os.path.join(
-            args.res_dir, "model_checkpoint{}.pth".format(args.epochs)
-        )
+    if args.transfer == '':
+        args.model_pos = os.path.join(args.res_dir, 'model_checkpoint{}.pth'.format(args.epochs))
     else:
-        args.model_pos = os.path.join(
-            args.transfer, "model_checkpoint{}.pth".format(args.epochs)
-        )
-
+        args.model_pos = os.path.join(args.transfer, 'model_checkpoint{}.pth'.format(args.epochs))
+    if not os.path.exists(args.res_dir):
+        os.makedirs(args.res_dir) 
+    
+    if not args.keep_old and not args.transfer:
+        # backup current main.py, model.py files
+        copy('igcmf.py', args.res_dir)
+        copy('igcmf_functions.py', args.res_dir)
+        copy('util_functions.py', args.res_dir)
+        copy('models.py', args.res_dir)
+        copy('igcmf_train_eval.py', args.res_dir)
+    # save command line input
+    cmd_input = 'python ' + ' '.join(sys.argv) + '\n'
+    with open(os.path.join(args.res_dir, 'cmd_input.txt'), 'a') as f:
+        f.write(cmd_input)
+    print('Command line input: ' + cmd_input + ' is saved.')
+    
     """
       3. Load data (only ml_100k for now)
     """
@@ -454,17 +494,6 @@ def main():
             neg_sample_ratio= args.neg_sample_ratio,
         )
 
-    # IGMC GNN model (default)
-    if args.transfer:
-        num_relations = args.num_relations
-        multiply_by = args.multiply_by
-    else:
-        num_relations = len(class_values)  # for side matrix
-        multiply_by = 1
-    n_features = (
-        0  # NOTE: considering it is using CMF because the features become inputs
-    )
-
     # Determine testing data (on which data to evaluate the trained model
     if not args.testing: 
         test_graphs = val_graphs
@@ -472,6 +501,16 @@ def main():
         len(train_graphs), 
         len(test_graphs), 
     ))
+
+
+    # IGMC GNN model (default)
+    if args.transfer:
+        num_relations = args.num_relations
+        multiply_by = args.multiply_by
+    else:
+        num_relations = len(class_values)  # for side matrix
+        multiply_by = 1
+        n_features = 0 # NOTE: side-features become inputs
 
     model = IGCMF(
         train_graphs,
@@ -499,55 +538,72 @@ def main():
             lr_decay_step_size=args.lr_decay_step_size,
             weight_decay=0,
             ARR=args.ARR,
+            BETA=args.BETA,
             test_freq=args.test_freq,
             logger=logger,
             continue_from=args.continue_from,
             res_dir=args.res_dir,
         )
 
-    if args.ensemble:
-        if args.data_name == "ml_1m":
-            start_epoch, end_epoch, interval = args.epochs - 15, args.epochs, 5
-        else:
-            start_epoch, end_epoch, interval = args.epochs - 30, args.epochs, 10
-        if args.transfer:
-            checkpoints = [
-                os.path.join(args.transfer, "model_checkpoint%d.pth" % x)
-                for x in range(start_epoch, end_epoch + 1, interval)
-            ]
-            epoch_info = "transfer {}, ensemble of range({}, {}, {})".format(
-                args.transfer, start_epoch, end_epoch, interval
-            )
-        else:
-            checkpoints = [
-                os.path.join(args.res_dir, "model_checkpoint%d.pth" % x)
-                for x in range(start_epoch, end_epoch + 1, interval)
-            ]
-            epoch_info = "ensemble of range({}, {}, {})".format(
-                start_epoch, end_epoch, interval
-            )
-        rmse = test_once(
-            test_graphs,
+    if args.visualize:
+        model.load_state_dict(torch.load(args.model_pos))
+        visualize(
             model,
-            args.batch_size,
-            logger=None,
-            ensemble=True,
-            checkpoints=checkpoints,
+            test_graphs,
+            args.res_dir,
+            args.data_name,
+            class_values,
+            sort_by='prediction'
         )
-        print("Ensemble test rmse is: {:.6f}".format(rmse))
-    else:
         if args.transfer:
-            model.load_state_dict(torch.load(args.model_pos))
-            rmse = test_once(test_graphs, model, args.batch_size, logger=None)
-            epoch_info = "transfer {}, epoch {}".format(args.transfer, args.epoch)
-        print("Test rmse is: {:.6f}".format(rmse))
+            rmse = test_once(test_graphs, model, args.batch_size, logger)
+            print('Transfer learning rmse is: {:.6f}'.format(rmse))
+    else:
+        if args.ensemble:
+            if args.data_name == 'ml_1m':
+                start_epoch, end_epoch, interval = args.epochs-15, args.epochs, 5
+            else:
+                start_epoch, end_epoch, interval = args.epochs-30, args.epochs, 10
+            if args.transfer:
+                checkpoints = [
+                    os.path.join(args.transfer, 'model_checkpoint%d.pth' % x)
+                    for x in range(start_epoch, end_epoch+1, interval)
+                ]
+                epoch_info = 'transfer {}, ensemble of range({}, {}, {})'.format(
+                    args.transfer, start_epoch, end_epoch, interval
+                )
+            else:
+                checkpoints = [
+                    os.path.join(args.res_dir, 'model_checkpoint%d.pth' % x)
+                    for x in range(start_epoch, end_epoch+1, interval)
+                ]
+                epoch_info = 'ensemble of range({}, {}, {})'.format(
+                    start_epoch, end_epoch, interval
+                )
+            rmse = test_once(
+                test_graphs,
+                model,
+                args.batch_size,
+                logger=None,
+                ensemble=True,
+                checkpoints=checkpoints
+            )
+            print('Ensemble test rmse is: {:.6f}'.format(rmse))
+        else:
+            if args.transfer:
+                model.load_state_dict(torch.load(args.model_pos))
+                rmse = test_once(test_graphs, model,
+                                 args.batch_size, logger=None)
+                epoch_info = 'transfer {}, epoch {}'.format(
+                    args.transfer, args.epoch)
+            print('Test rmse is: {:.6f}'.format(rmse))
 
-    eval_info = {
-        "epoch": epoch_info,
-        "train_loss": 0,
-        "test_rmse": rmse,
-    }
-    logger(eval_info, None, None)
+        eval_info = {
+            'epoch': epoch_info,
+            'train_loss': 0,
+            'test_rmse': rmse,
+        }
+        logger(eval_info, None, None)
 
 
 if __name__ == "__main__":

@@ -389,25 +389,20 @@ def run():
             num_relations = args.num_relations
             multiply_by = args.multiply_by
         else:
-            # IGMC GNN model (default)
-            if args.transfer:
-                num_relations = args.num_relations
-                multiply_by = args.multiply_by
-            else:
-                num_relations = len(class_values)
-                multiply_by = 1
-            model = IGMC(
-                train_graphs,
-                latent_dim=[32, 32, 32, 32],
-                num_relations=num_relations,
-                num_bases=4,
-                regression=True,
-                adj_dropout=args.adj_dropout,
-                force_undirected=args.force_undirected,
-                side_features=args.use_features,
-                n_side_features=n_features,
-                multiply_by=multiply_by
-            )
+            num_relations = len(class_values)
+            multiply_by = 1
+        model = IGMC(
+            train_graphs,
+            latent_dim=[32, 32, 32, 32],
+            num_relations=num_relations,
+            num_bases=4,
+            regression=True,
+            adj_dropout=args.adj_dropout,
+            force_undirected=args.force_undirected,
+            side_features=args.use_features,
+            n_side_features=n_features,
+            multiply_by=multiply_by
+        )
 
     if not args.no_train:
         train_multiple_epochs(
