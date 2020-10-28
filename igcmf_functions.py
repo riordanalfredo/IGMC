@@ -276,7 +276,7 @@ def get_neg_nodes(u_node, v_nodes, A, neg_ratio=3):
     return u_list, v_list
 
 def find_with_neg_samples(subgraph, ori_nodes, neg_nodes):
-    u, v, r = ssp.find(subgraph)  # r is 1, 2... (rating labels + 1)    
+    u,v,r = negative_sampling_coordinates(subgraph) # get all connections (include zeros)
     val = float(0)
     r_neg = [val for _ in range(len(neg_nodes))]
     u_neg_ind = [0 for _ in range(len(neg_nodes))]
