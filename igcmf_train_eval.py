@@ -186,11 +186,11 @@ def train(
     device,
     regression=False,
     ARR=0,
+    BETA=0,
     show_progress=False,
     epoch=None,
 ):
     model.train()
-    BETA = 0.001
     total_loss = 0
     if show_progress:
         pbar = tqdm(loader)
