@@ -176,7 +176,7 @@ def num_graphs(data):
     if data.batch is not None:
         return data.num_graphs
     else:
-        return (data.x1.size(0) + data.x2.size(0)) / 2
+        return data.y1.size(0) + data.y2.size(0)
 
 
 def train(
@@ -223,7 +223,7 @@ def train(
                 loss2 += BETA * g_loss
         loss = loss1 + loss2
         loss.backward()
-        total_loss += loss.item() * (40)  # 2 graphs TODO
+        total_loss += loss.item() * num_graphs(data)  # 2 graphs 
         optimizer.step()
         torch.cuda.empty_cache()
     return total_loss / len(loader.dataset)
