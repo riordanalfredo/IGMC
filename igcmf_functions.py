@@ -268,7 +268,7 @@ def get_neg_nodes(u_node, v_nodes, A, neg_ratio=3):
     res_list = []
 
     if(neg_l < max_l - l):
-        res_list = random.choices(neg_nodes, k=neg_l)
+        res_list = random.sample(neg_nodes, k=neg_l)
     else:
         res_list = neg_nodes
     u_list = [u_node for x in range(len(res_list))]
@@ -280,7 +280,7 @@ def find_with_neg_samples(subgraph, ori_nodes, neg_nodes):
     val = float(0)
     r_neg = [val for _ in range(len(neg_nodes))]
     u_neg_ind = [0 for _ in range(len(neg_nodes))]
-    v_neg_ind = [x for x in range(1, len(neg_nodes)+1)]
+    v_neg_ind = [x for x in range(len(ori_nodes), len(neg_nodes)+len(ori_nodes))]
     u = np.append(u,u_neg_ind)
     v = np.append(v,v_neg_ind)
     r = np.append(r,r_neg)
