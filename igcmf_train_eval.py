@@ -176,7 +176,7 @@ def num_graphs(data):
     if data.batch is not None:
         return data.num_graphs
     else:
-        return data.y1.size(0) + data.y2.size(0)
+        return data.y1.size(0)
 
 
 def train(
