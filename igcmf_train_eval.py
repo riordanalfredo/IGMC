@@ -32,6 +32,7 @@ def train_multiple_epochs(
     lr_decay_step_size,
     weight_decay,
     ARR=0,
+    BETA=0,
     test_freq=1,
     logger=None,
     continue_from=None,
@@ -98,6 +99,7 @@ def train_multiple_epochs(
             device,
             regression=True,
             ARR=ARR,
+            BETA=BETA,
             show_progress=batch_pbar,
             epoch=epoch,
         )
@@ -214,7 +216,7 @@ def train(
                 )
                 reg_loss = torch.sum((w[1:, :, :] - w[:-1, :, :]) ** 2)  # Eq. 6
                 loss1 += ARR * reg_loss
-                # ARR is alpha in the paper (default: 0.001) Eq. 7
+        if BETA != 0:
             for gconv in model.convs2:
                 w = (gconv.comp @ gconv.weight.view(gconv.num_bases, -1)).view(
                     gconv.num_relations, gconv.in_channels_l, gconv.out_channels
