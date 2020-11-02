@@ -334,12 +334,8 @@ class IGCMF(GNN):
             data.ig_edge_index,
             data.ig_edge_type,
         )
-        embd_dict={
-            'ui'= None,
-            'ig'= None,
-        }
 
-        def gnn_embedding(x, edge_index, edge_type, u , v, convs, indicator):
+        def gnn_embedding(x, edge_index, edge_type, u , v, convs):
             if self.adj_dropout > 0:
                 edge_index, edge_type = dropout_adj(
                     edge_index,
@@ -354,7 +350,7 @@ class IGCMF(GNN):
                 x = torch.tanh(conv(x, edge_index, edge_type))
                 concat_states.append(x)
             concat_states = torch.cat(concat_states, 1)  # eq. 2
-            embd_dict[indicator] = [concat_states[u], concat_states[v]
+            return concat_states[u], concat_states[v]
         
         def MLP(u, v):
             x = torch.cat([u, v], 1)  
@@ -365,17 +361,13 @@ class IGCMF(GNN):
 
         users = data.x1[:, 0] == 1
         items = data.x1[:, 1] == 1
-        x1 = gnn_embedding(x1,ui_edge_index,ui_edge_type,users,items, self.convs1)
+        user_embedding, item_embedding_ui = gnn_embedding(x1,ui_edge_index,ui_edge_type,users,items, self.convs1)
 
         items = data.x2[:, 0] == 1
         genres = data.x2[:, 1] == 1
-        x2 = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres, self.convs2)
+        item_embedding_ig, genre_embedding = gnn_embedding(x2,ig_edge_index,ig_edge_type,items,genres, self.convs2)
 
-        item_embedding = (embd_dict['ui'][1] + embd_dict['ig'][0])/2
-        user_embedding = embd_dict['ui'][0]
-        genre_embedding = embd_dict['ig'][1]
-        embeddings = [user_embedding, item_embedding, genre_embedding]
-        
+        item_embedding = (item_embedding_ui + item_embedding_ig)/2        
         x1 = MLP(user_embedding, item_embedding)
         x2 = MLP(item_embedding, genre_embedding)
       
